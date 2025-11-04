@@ -1,0 +1,14 @@
+# Core framework
+Django==5.0
+
+# ESI integration and OAuth
+django-esi
+
+# EVE Online Fit Parsing
+eveparse
+
+# MySQL database driver
+PyMySQL==1.1.1
+
+# For making generic HTTP requests
+requests==2.32.3

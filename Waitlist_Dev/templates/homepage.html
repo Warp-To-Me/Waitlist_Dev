@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVE Waitlist</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: grid;
+            place-items: center;
+            min-height: 100vh;
+            background: #222;
+            color: #eee;
+        }
+
+        .container {
+            text-align: center;
+        }
+
+        .login-btn {
+            display: inline-block;
+            padding: 15px 30px;
+            margin-top: 20px;
+            background-color: #3b5998; /* EVE SSO Blue */
+            color: #fff;
+            text-decoration: none;
+            font-size: 1.2em;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+            .login-btn:hover {
+                background-color: #4e71bb;
+            }
+
+        .logout-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #993333;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EVE Online Waitlist</h1>
+
+        {% if user.is_authenticated %}
+        <!-- Show this if the user is logged in -->
+        <p>Welcome, <strong>{{ user.username }}</strong>!</p>
+        <p>Your associated EVE characters:</p>
+        <ul>
+            {% for char in user.eve_characters.all %}
+            <li>{{ char.character_name }}</li>
+            {% empty %}
+            <li>No EVE characters linked yet.</li>
+            {% endfor %}
+        </ul>
+
+        <a href="{% url 'esi_auth:logout' %}" class="logout-btn">Log Out</a>
+
+        {% else %}
+        <!-- Show this if the user is NOT logged in -->
+        <p>Please log in with EVE SSO to join the waitlist.</p>
+
+        <!--
+          This is the critical line.
+          It MUST be 'esi:login'
+        -->
+        <a href="{% url 'esi:login' %}" class="login-btn">
+            Log In with EVE Online
+        </a>
+        {% endif %}
+    </div>
+</body>
+</html>
+
