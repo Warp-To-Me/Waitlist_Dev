@@ -1,3 +1,4 @@
+<!-- THIS IS THE NEWEST VERSION OF THIS FILE - V2 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -62,17 +63,14 @@
             {% endfor %}
         </ul>
 
+        <!-- This URL uses the 'esi_auth' namespace and should work -->
         <a href="{% url 'esi_auth:logout' %}" class="logout-btn">Log Out</a>
 
         {% else %}
         <!-- Show this if the user is NOT logged in -->
         <p>Please log in with EVE SSO to join the waitlist.</p>
 
-        <!--
-          This is the critical line.
-          It MUST be 'esi:login'
-        -->
-        <a href="{% url 'esi:login' %}" class="login-btn">
+        <a href="/sso/login/" class="login-btn">
             Log In with EVE Online
         </a>
         {% endif %}

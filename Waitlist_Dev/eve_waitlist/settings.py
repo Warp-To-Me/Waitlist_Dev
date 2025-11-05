@@ -184,5 +184,7 @@ ESI_SSO_SCOPES = [
 ]
 
 # Tell Django what the login URL is.
-# This is the fix for the NoReverseMatch error.
-LOGIN_URL = 'esi:login'
+#
+# THE FIX IS HERE:
+# This must match the new hardcoded path.
+LOGIN_URL = '/sso/login/'
