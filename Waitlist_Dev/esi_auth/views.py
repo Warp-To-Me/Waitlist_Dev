@@ -14,8 +14,8 @@ def esi_logout(request):
     logout(request)
     
     # Redirect back to the homepage
-    # We use 'homepage' which we named in the main eve_waitlist/urls.py
-    return redirect('homepage')
+    # We use 'home' which we named in the main eve_waitlist/urls.py
+    return redirect('home')
 
 #
 # The 'esi_login' and 'esi_callback' views have been removed.

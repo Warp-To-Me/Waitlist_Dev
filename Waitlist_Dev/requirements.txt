@@ -1,5 +1,6 @@
 # Core framework
 Django==5.0
+python-dotenv
 
 # ESI integration and OAuth
 django-esi

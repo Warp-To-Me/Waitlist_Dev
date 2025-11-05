@@ -15,19 +15,28 @@ pymysql.install_as_MySQLdb()
 
 from pathlib import Path
 import os # Make sure os is imported
+from dotenv import load_dotenv # Import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --- Load .env file ---
+# Load environment variables from .env file in BASE_DIR
+# This file should be in /Waitlist_Dev/.env
+load_dotenv(BASE_DIR / '.env')
+# --- End .env file ---
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'Y9jzcvWCtyCgVp1AlnBJMvb0kH4bPuTf'
+# Load from .env
+SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Load from .env, default to False if not set
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
@@ -83,15 +92,16 @@ WSGI_APPLICATION = 'eve_waitlist.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+# Load from .env
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'waitlist-dev',  # The name you created in HeidiSQL
-        'USER': 'root',             # Your MySQL username
-        'PASSWORD': 'root',         # Your MySQL password
-        'HOST': '127.0.0.1',        # Or 'localhost'
-        'PORT': '3306',
+        'NAME': os.environ.get('DB_NAME'),        # The name you created in HeidiSQL
+        'USER': os.environ.get('DB_USER'),           # Your MySQL username
+        'PASSWORD': os.environ.get('DB_PASSWORD'),   # Your MySQL password
+        'HOST': os.environ.get('DB_HOST'),         # Or 'localhost'
+        'PORT': os.environ.get('DB_PORT'),
     }
 }
 
@@ -122,7 +132,7 @@ LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
 
-USE_I18N = True
+USE_I1N = True
 
 USE_TZ = True
 
@@ -146,18 +156,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- ESI / SSO SETTINGS ---
 
 # This is the contact email required by CCP
-ESI_USER_CONTACT_EMAIL = 'tekeve@gmail.com' # PLEASE CHANGE THIS
+ESI_USER_CONTACT_EMAIL = os.environ.get('ESI_USER_CONTACT_EMAIL')
 
 # Set your callback URL in the EVE dev portal to:
 # http://127.0.0.1:8000/auth/callback/  (for local testing)
 # https://your-domain.com/auth/callback/ (for production)
 #
-ESI_SSO_CLIENT_ID = '6333f47f40c5401f96ad0f16799c2301'
-ESI_SSO_CLIENT_SECRET = 'eat_2dOLfdF6zBQoviRtq9bixEAQkVhHJm9dz_mMuZN'
+# Load from .env
+ESI_SSO_CLIENT_ID = os.environ.get('ESI_SSO_CLIENT_ID')
+ESI_SSO_CLIENT_SECRET = os.environ.get('ESI_SSO_CLIENT_SECRET')
 ESI_SSO_CALLBACK_URL = 'http://127.0.0.1:8000/auth/callback/'
 
-# This is the login URL for the `esi_auth` app
-LOGIN_URL = '/auth/login/'
+# We are removing the first "LOGIN_URL = '/auth/login/'" definition here.
+# The correct one is at the bottom of the file.
 LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
 LOGOUT_REDIRECT_URL = '/'
 # --- End ESI Configuration ---
@@ -175,4 +186,3 @@ ESI_SSO_SCOPES = [
 # Tell Django what the login URL is.
 # This is the fix for the NoReverseMatch error.
 LOGIN_URL = 'esi:login'
-

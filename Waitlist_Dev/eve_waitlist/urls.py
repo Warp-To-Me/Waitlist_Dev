@@ -25,9 +25,13 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # ESI SSO URLs (login, callback)
-    path('sso/', include('esi.urls', namespace='esi')),
+    #
+    # THE FIX IS HERE:
+    # We are changing include('esi.urls', namespace='esi')
+    # to include(('esi.urls', 'esi'), namespace='esi')
+    # This explicitly tells Django the app_name is 'esi'
+    path('sso/', include(('esi.urls', 'esi'), namespace='esi')),
     
     # Our custom auth views (just logout for now)
     path('auth/', include('esi_auth.urls', namespace='esi_auth')),
 ]
-
