@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ character.character_name }} - Pilot Details</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #222;
+            color: #eee;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 20px;
+        }
+        .header img {
+            border-radius: 50%;
+            border: 2px solid #555;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .info {
+            font-size: 1.1em;
+            color: #ccc;
+        }
+        .section {
+            margin-top: 20px;
+        }
+        .section h2 {
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .implant-list {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 5px;
+        }
+        .implant-list img {
+            border-radius: 5px;
+        }
+        .skill-list {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+        .skill-item {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .skill-item img {
+            width: 32px;
+            height: 32px;
+        }
+        .skill-name {
+            font-weight: bold;
+            flex-grow: 1;
+        }
+        .skill-level {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        .home-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #4e71bb;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .home-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="{{ portrait_url }}" alt="{{ character.character_name }} portrait" width="128" height="128">
+            <div>
+                <h1>{{ character.character_name }}</h1>
+                <p class="info">
+                    Total SP: {{ total_sp|floatformat:0 }}<br>
+                    <small>Snapshot as of: {{ snapshot_time }}</small>
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Implants</h2>
+            <div class="implant-list">
+                {% for implant in implants %}
+                    <img src="{{ implant.icon_url }}" alt="Implant {{ implant.type_id }}" title="Implant {{ implant.type_id }}">
+                {% empty %}
+                    <p>No implants found.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Skills</h2>
+            <ul class="skill-list">
+                {% for skill in skills %}
+                    <li class="skill-item">
+                        <!-- We use the type_id to get the icon. We don't have the name,
+                             but we could add another ESI call to get it (slow) or
+                             use a static data export (complex).
+                             For now, we'll just show the icon and level. -->
+                        <img src="https://images.evetech.net/types/{{ skill.skill_id }}/icon?size=32" alt="Skill Icon">
+                        <span class="skill-name">Skill ID: {{ skill.skill_id }}</span>
+                        <span class="skill-level">Level {{ skill.active_skill_level }}</span>
+                    </li>
+                {% empty %}
+                    <li>No skills found.</li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <a href="{% url 'home' %}" class="home-link">&larr; Back to Homepage</a>
+    </div>
+</body>
+</html>

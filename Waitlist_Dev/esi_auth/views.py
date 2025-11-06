@@ -10,6 +10,7 @@ from waitlist.models import EveCharacter
 from django.conf import settings
 from urllib.parse import urlencode
 import secrets 
+from datetime import timezone, timedelta # Import for time calculations
 
 # Import the CallbackRedirect model from the esi library
 from esi.models import CallbackRedirect, Token
@@ -99,7 +100,16 @@ def sso_complete_login(request):
     esi_token = callback_redirect.token
     if not esi_token:
         # Callback happened but didn't result in a token.
+        callback_redirect.delete() # Clean up the failed redirect
         return redirect('home')
+        
+    # --- THIS IS THE FIX (Part 2) ---
+    # The 'esi_token' is the NEW token. We must delete all
+    # old tokens for this character to prevent duplicates.
+    Token.objects.filter(
+        character_id=esi_token.character_id
+    ).exclude(pk=esi_token.pk).delete()
+    # --- END FIX ---
         
     # 3. --- THIS IS THE NEW LOGIC ---
     #    The 'esi_callback' does NOT create a user, so we do it.
@@ -124,20 +134,31 @@ def sso_complete_login(request):
     
     # This variable will hold the Django account
     user_account = None 
-    is_new_user = False
+    
+    # --- START FIX: We need to know if we should log them in at the end ---
+    # We'll store this boolean.
+    user_was_authenticated = request.user.is_authenticated
+    # --- END FIX ---
 
-    if request.user.is_authenticated:
+
+    if user_was_authenticated:
         # CASE 1: USER IS ALREADY LOGGED IN (Adding an Alt)
         # Use the currently logged-in user as the account.
         user_account = request.user
     else:
         # CASE 2: USER IS NOT LOGGED IN (First-time login)
-        # We need to find or create a new user account.
-        # We'll use the character name as the account username.
+        # --- THIS IS THE FIX ---
+        # We now use the character ID as the username, which has no spaces.
+        # We store the character's real name in the 'first_name' field.
         user_account, created = User.objects.get_or_create(
-            username=char_name
+            username=str(char_id), # Use character ID as username
+            defaults={'first_name': char_name} # Set name only on creation
         )
-        is_new_user = created # Flag this as a new user
+
+        # If user already existed, check if their name changed
+        if not created and user_account.first_name != char_name:
+            user_account.first_name = char_name
+            user_account.save() # Save the name change
 
         if created:
             user_account.is_active = True
@@ -145,7 +166,7 @@ def sso_complete_login(request):
             if User.objects.count() == 1:
                 user_account.is_staff = True
                 user_account.is_superuser = True
-            user_account.save()
+            user_account.save() # Save the new user (with flags)
             
     # --- END FIX ---
 
@@ -158,24 +179,45 @@ def sso_complete_login(request):
     # --- FINAL FIX: Create the EveCharacter object ---
     # 6. Find or create the EveCharacter link.
     #    This now correctly uses 'user_account'
+    
+    # --- THIS IS THE FIX ---
+    # We were using 'esi_token.expires', which does not exist.
+    # We will now calculate the expiry time based on the 'created' field.
+    # Most EVE tokens last for 20 minutes (1200 seconds).
+    expiry_time = esi_token.created + timedelta(seconds=1200)
+    
     eve_char, char_created = EveCharacter.objects.get_or_create(
         character_id=char_id,
         defaults={
             'user': user_account, # Link to the correct account
             'character_name': char_name,
-            # We're just saving the basics, we'll update
-            # tokens later if we need to.
             'access_token': esi_token.access_token,
             'refresh_token': esi_token.refresh_token,
-            'token_expiry': esi_token.expires
+            'token_expiry': expiry_time # Use our calculated time
         }
     )
     
     # If the character record already existed, update its user link
     # This handles "re-linking" a character to a different account if needed
-    if not char_created and eve_char.user != user_account:
-        eve_char.user = user_account
+    if not char_created:
+        if eve_char.user != user_account:
+            eve_char.user = user_account
+        # Also update the token fields in case they were refreshed
+        eve_char.access_token = esi_token.access_token
+        eve_char.refresh_token = esi_token.refresh_token
+        eve_char.token_expiry = expiry_time # Use our calculated time
         eve_char.save()
+    elif char_created:
+        # This was a new character, but if the token has expired
+        # we need to update the expiry time.
+        # This handles the case where the EveCharacter was created
+        # but the token fields were not updated.
+        # A bit redundant with the defaults, but ensures freshness.
+        eve_char.access_token = esi_token.access_token
+        eve_char.refresh_token = esi_token.refresh_token
+        eve_char.token_expiry = expiry_time # Use our calculated time
+        eve_char.save()
+
     # --- END FINAL FIX ---
 
     # 7. We have the user object in memory, so we can
@@ -185,9 +227,11 @@ def sso_complete_login(request):
     # 8. Now, we perform the login logic.
     if user_account: # This user object is now guaranteed to exist
         
-        # Only log in if it was a new user.
-        # If they were just adding an alt, they are already logged in.
-        if is_new_user:
+        # --- THIS IS THE FIX ---
+        # Only log the user in if they weren't *already* logged in
+        # at the start of this request.
+        if not user_was_authenticated:
+        # --- END FIX ---
             if not user_account.is_active: # This is a good safety check
                 user_account.is_active = True
                 user_account.save()

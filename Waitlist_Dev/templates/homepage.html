@@ -81,6 +81,16 @@
             }
         /* --- END NEW STYLE --- */
 
+        /* --- NEW STYLE FOR FC BUTTON --- */
+        .fc-btn {
+            background-color: #cc6600; /* A distinct orange for FCs */
+        }
+
+            .fc-btn:hover {
+                background-color: #ff8000;
+            }
+        /* --- END NEW STYLE --- */
+
     </style>
 </head>
 <body>
@@ -89,11 +99,29 @@
 
         {% if user.is_authenticated %}
         <!-- Show this if the user is logged in -->
-        <p>Welcome, <strong>{{ user.username }}</strong>!</p>
+        <!--
+          CHANGE 1:
+          We now use user.first_name, which holds the character's
+          real name, instead of user.username (which holds the ID).
+        -->
+        <p>Welcome, <strong>{{ user.first_name }}</strong>!</p>
+
         <p>Your associated EVE characters:</p>
         <ul>
+            <!--
+              CHANGE 2:
+              We add the character_id in parentheses next to the name.
+
+              --- NEW CHANGE ---
+              We also make the character name a link to their new pilot page.
+            -->
             {% for char in user.eve_characters.all %}
-            <li>{{ char.character_name }}</li>
+            <li>
+                <a href="{% url 'pilot:pilot_detail' char.character_id %}" style="color: #4e71bb;">
+                    {{ char.character_name }}
+                </a>
+                ({{ char.character_id }})
+            </li>
             {% empty %}
             <li>No EVE characters linked yet.</li>
             {% endfor %}
@@ -109,6 +137,11 @@
             {% if user.is_staff %}
             <!-- Use 'admin:index' as it's the named URL for the admin homepage -->
             <a href="{% url 'admin:index' %}" class="admin-btn">Admin Panel</a>
+
+            <!-- --- THE FIX: ADD 'UPDATE FC SCOPES' BUTTON --- -->
+            <!-- This button sends a query param to request FC scopes -->
+            <a href="{% url 'esi_auth:login' %}?scopes=fc" class="admin-btn fc-btn">Update FC Scopes</a>
+            <!-- --- END FIX --- -->
             {% endif %}
 
             <!-- --- THE FIX: ADD 'ADD CHARACTER' BUTTON --- -->

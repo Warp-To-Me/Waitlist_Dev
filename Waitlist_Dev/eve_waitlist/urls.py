@@ -37,4 +37,6 @@ urlpatterns = [
     # THE FIX IS HERE:
     # We are also explicitly defining the namespace 'esi_auth' here...
     path('auth/', include('esi_auth.urls', namespace='esi_auth')),
+    # Add the URLs for our new pilot app
+    path('pilot/', include('pilot.urls', namespace='pilot')),
 ]

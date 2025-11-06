@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'esi_auth',
     'waitlist',
     'fleet_admin',
+    'pilot',
 ]
 
 MIDDLEWARE = [
