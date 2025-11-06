@@ -17,6 +17,10 @@ class EveType(models.Model):
     type_id = models.IntegerField(primary_key=True, unique=True)
     name = models.CharField(max_length=255)
     group = models.ForeignKey(EveGroup, on_delete=models.CASCADE, related_name="types")
+    
+    # --- ADDED THIS FIELD ---
+    slot = models.IntegerField(null=True, blank=True, help_text="Implant slot (if applicable)")
+    # --- END ADDITION ---
 
     def __str__(self):
         return self.name
@@ -44,24 +48,18 @@ class PilotSnapshot(models.Model):
     
     last_updated = models.DateTimeField(auto_now=True)
 
-    def get_implants(self):
-        """Helper to get implant list from JSON."""
+    # --- MODIFIED THIS METHOD ---
+    def get_implant_ids(self):
+        """Helper to get implant ID list from JSON."""
         if not self.implants_json:
             return []
         try:
             # The ESI response is just a list of type_ids, e.g., [33323, 22118]
             implant_ids = json.loads(self.implants_json)
-            # We'll create a list of dicts with the image URL
-            implants = [
-                {
-                    'type_id': implant_id,
-                    'icon_url': f"https://images.evetech.net/types/{implant_id}/icon?size=32"
-                }
-                for implant_id in implant_ids
-            ]
-            return implants
+            return implant_ids
         except json.JSONDecodeError:
             return []
+    # --- END MODIFICATION ---
 
     def get_skills(self):
         """Helper to get skill list from JSON."""

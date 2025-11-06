@@ -1,0 +1,256 @@
+﻿<!DOCTYPE html>
+{% load humanize %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The title block can be overridden by child templates -->
+    <title>{% block title %}EVE Waitlist{% endblock %}</title>
+
+    <style>
+        /* --- GLOBAL STYLES --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            background: #222;
+            color: #eee;
+            margin: 0;
+            padding-top: 80px; /* Make space for the fixed header */
+        }
+
+        /* --- HEADER & DROPDOWN STYLES --- */
+        .user-header {
+            position: fixed; /* Changed to fixed so it's always visible */
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+            background: #2a2a2a; /* Give it a background */
+            padding: 10px 20px; /* Add some padding */
+            border-bottom: 1px solid #444;
+            justify-content: flex-end; /* Align to the right */
+        }
+
+        .profile-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #555;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+        }
+
+            .profile-btn:hover {
+                background-color: #666;
+            }
+
+        .character-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-toggle {
+            display: flex;
+            align-items: center;
+            background-color: #444;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 5px;
+            cursor: pointer;
+            min-width: 200px;
+            transition: background-color 0.2s;
+        }
+
+            .dropdown-toggle:hover {
+                background-color: #4a4a4a;
+            }
+
+            .dropdown-toggle img {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: 1px solid #666;
+            }
+
+            .dropdown-toggle span {
+                margin-left: 10px;
+                font-weight: 600;
+                color: #fff;
+            }
+
+            .dropdown-toggle::after {
+                content: '▼';
+                font-size: 0.7em;
+                color: #aaa;
+                margin-left: auto;
+                padding-left: 10px;
+            }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #444;
+            border: 1px solid #555;
+            border-radius: 5px;
+            min-width: 100%;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            z-index: 1;
+            right: 0;
+            margin-top: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+            .dropdown-content.show {
+                display: block;
+            }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-bottom: 1px solid #555;
+        }
+
+            .dropdown-item:last-child {
+                border-bottom: none;
+            }
+
+            .dropdown-item:hover {
+                background-color: #5a5a5a;
+            }
+
+            .dropdown-item img {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: 1px solid #666;
+            }
+
+            .dropdown-item span {
+                margin-left: 10px;
+                color: #fff;
+            }
+
+        /* --- Child template styles will go here --- */
+        {
+            % block styles %
+        }
+
+        {
+            % endblock %
+        }
+    </style>
+</head>
+<body>
+
+    {% if user.is_authenticated %}
+    {% with main_char=user.eve_characters.first all_chars=user.eve_characters.all %}
+
+    <!-- --- SHARED USER HEADER --- -->
+    <nav class="user-header">
+
+        <a href="{% url 'home' %}" class="profile-btn" style="margin-right: auto; background-color: #3b5998;">
+            Home
+        </a>
+
+        <!-- The Profile button, its href will be updated by JS -->
+        <a href="{% if main_char %}{% url 'pilot:pilot_detail' main_char.character_id %}{% endif %}"
+           id="profile-link"
+           class="profile-btn"
+           {% if not main_char %}style="display: none;" {% endif %}>
+            View Profile
+        </a>
+
+        <!-- The character dropdown -->
+        {% if main_char %}
+        <div class="character-dropdown">
+            <div class="dropdown-toggle" id="dropdown-toggle-button">
+                <img id="selected-char-portrait"
+                     src="https://images.evetech.net/characters/{{ main_char.character_id }}/portrait?size=32"
+                     alt="{{ main_char.character_name }} portrait">
+                <span id="selected-char-name">{{ main_char.character_name }}</span>
+            </div>
+
+            <div class="dropdown-content" id="dropdown-list">
+                {% for char in all_chars %}
+                <div class="dropdown-item"
+                     data-id="{{ char.character_id }}"
+                     data-name="{{ char.character_name }}"
+                     data-portrait-url="https://images.evetech.net/characters/{{ char.character_id }}/portrait?size=32">
+
+                    <img src="https://images.evetech.net/characters/{{ char.character_id }}/portrait?size=32"
+                         alt="{{ char.character_name }} portrait">
+                    <span>{{ char.character_name }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </nav>
+    {% endwith %}
+    {% endif %}
+
+    <!-- --- MAIN CONTENT BLOCK --- -->
+    <!-- Child templates will inject their content here -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <!-- --- END MAIN CONTENT BLOCK --- -->
+    <!-- --- SHARED JAVASCRIPT --- -->
+    <script>
+        const dropdownToggleButton = document.getElementById('dropdown-toggle-button');
+
+        if (dropdownToggleButton) {
+            const dropdownList = document.getElementById('dropdown-list');
+            const profileLink = document.getElementById('profile-link');
+            const selectedCharPortrait = document.getElementById('selected-char-portrait');
+            const selectedCharName = document.getElementById('selected-char-name');
+
+            // 1. Toggle the dropdown
+            dropdownToggleButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                dropdownList.classList.toggle('show');
+            });
+
+            // 2. Handle clicks on dropdown items
+            dropdownList.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const charId = item.dataset.id;
+                    const charName = item.dataset.name;
+                    const charPortraitUrl = item.dataset.portraitUrl;
+
+                    selectedCharPortrait.src = charPortraitUrl;
+                    selectedCharName.textContent = charName;
+
+                    // We can't just replace the ID, because the user might
+                    // be on the homepage. We must build the full URL.
+                    const profileUrl = `{% url 'pilot:pilot_detail' 0 %}`.replace('0', charId);
+                    profileLink.href = profileUrl;
+
+                    dropdownList.classList.remove('show');
+                });
+            });
+
+            // 3. Close dropdown if clicking outside
+            window.addEventListener('click', () => {
+                if (dropdownList.classList.contains('show')) {
+                    dropdownList.classList.remove('show');
+                }
+            });
+        }
+    </script>
+
+    <!-- Child template scripts will go here -->
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>

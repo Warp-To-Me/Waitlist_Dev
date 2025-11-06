@@ -1,165 +1,86 @@
-<!-- THIS IS THE NEWEST VERSION OF THIS FILE - V2 -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EVE Waitlist</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            display: grid;
-            place-items: center;
-            min-height: 100vh;
-            background: #222;
-            color: #eee;
-        }
+{% extends "base.html" %}
+{% load humanize %}
+<!-- This sets the page title in base.html -->
+{% block title %}EVE Waitlist - Home{% endblock %}
 
-        .container {
-            text-align: center;
-        }
+<!-- These styles are specific to the homepage -->
+{% block styles %}
+.container {
+    text-align: center;
+    /* We add padding to account for the fixed header */
+    padding-top: 40px;
+}
 
-        .login-btn {
-            display: inline-block;
-            padding: 15px 30px;
-            margin-top: 20px;
-            background-color: #3b5998; /* EVE SSO Blue */
-            color: #fff;
-            text-decoration: none;
-            font-size: 1.2em;
-            font-weight: bold;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
+.login-btn {
+    display: inline-block;
+    padding: 15px 30px;
+    margin-top: 20px;
+    background-color: #3b5998;
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.2em;
+    font-weight: bold;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+.login-btn:hover { background-color: #4e71bb; }
 
-            .login-btn:hover {
-                background-color: #4e71bb;
-            }
+.button-group {
+    margin-top: 20px;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
 
-        /* --- NEW STYLES --- */
-        .button-group {
-            margin-top: 20px;
-            display: flex;
-            gap: 15px; /* Adds space between buttons */
-            justify-content: center;
-        }
+.admin-btn,
+.logout-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
 
-        .admin-btn,
-        .logout-btn {
-            display: inline-block;
-            padding: 10px 20px;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s;
-        }
+.logout-btn { background-color: #993333; }
+.logout-btn:hover { background-color: #b33a3a; }
+.admin-btn { background-color: #339966; }
+.admin-btn:hover { background-color: #3caa73; }
+.add-alt-btn { background-color: #3b5998; }
+.add-alt-btn:hover { background-color: #4e71bb; }
+.fc-btn { background-color: #cc6600; }
+.fc-btn:hover { background-color: #ff8000; }
+{% endblock %}
 
-        .logout-btn {
-            background-color: #993333;
-        }
 
-            .logout-btn:hover {
-                background-color: #b33a3a;
-            }
+<!-- This content is injected into base.html's content block -->
+{% block content %}
+<div class="container">
+    <h1>EVE Online Waitlist</h1>
 
-        .admin-btn {
-            background-color: #339966; /* A green admin color */
-        }
+    {% if user.is_authenticated %}
 
-            .admin-btn:hover {
-                background-color: #3caa73;
-            }
+    <p>Welcome, <strong>{{ user.first_name }}</strong>!</p>
 
-        /* --- NEW STYLE FOR ALT BUTTON --- */
-        .add-alt-btn {
-            background-color: #3b5998; /* EVE SSO Blue */
-        }
-
-            .add-alt-btn:hover {
-                background-color: #4e71bb;
-            }
-        /* --- END NEW STYLE --- */
-
-        /* --- NEW STYLE FOR FC BUTTON --- */
-        .fc-btn {
-            background-color: #cc6600; /* A distinct orange for FCs */
-        }
-
-            .fc-btn:hover {
-                background-color: #ff8000;
-            }
-        /* --- END NEW STYLE --- */
-
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>EVE Online Waitlist</h1>
-
-        {% if user.is_authenticated %}
-        <!-- Show this if the user is logged in -->
-        <!--
-          CHANGE 1:
-          We now use user.first_name, which holds the character's
-          real name, instead of user.username (which holds the ID).
-        -->
-        <p>Welcome, <strong>{{ user.first_name }}</strong>!</p>
-
-        <p>Your associated EVE characters:</p>
-        <ul>
-            <!--
-              CHANGE 2:
-              We add the character_id in parentheses next to the name.
-
-              --- NEW CHANGE ---
-              We also make the character name a link to their new pilot page.
-            -->
-            {% for char in user.eve_characters.all %}
-            <li>
-                <a href="{% url 'pilot:pilot_detail' char.character_id %}" style="color: #4e71bb;">
-                    {{ char.character_name }}
-                </a>
-                ({{ char.character_id }})
-            </li>
-            {% empty %}
-            <li>No EVE characters linked yet.</li>
-            {% endfor %}
-        </ul>
-
-        <!--
-        THE FIX:
-        We add a check for 'user.is_staff'.
-        If true, we show the Admin Panel button.
-        We also put the buttons in a group for better layout.
-        -->
-        <div class="button-group">
-            {% if user.is_staff %}
-            <!-- Use 'admin:index' as it's the named URL for the admin homepage -->
-            <a href="{% url 'admin:index' %}" class="admin-btn">Admin Panel</a>
-
-            <!-- --- THE FIX: ADD 'UPDATE FC SCOPES' BUTTON --- -->
-            <!-- This button sends a query param to request FC scopes -->
-            <a href="{% url 'esi_auth:login' %}?scopes=fc" class="admin-btn fc-btn">Update FC Scopes</a>
-            <!-- --- END FIX --- -->
-            {% endif %}
-
-            <!-- --- THE FIX: ADD 'ADD CHARACTER' BUTTON --- -->
-            <!-- This button re-uses the same login flow to add an alt -->
-            <a href="{% url 'esi_auth:login' %}" class="admin-btn add-alt-btn">Add Character</a>
-            <!-- --- END FIX --- -->
-            <!-- This URL uses the 'esi_auth' namespace and should work -->
-            <a href="{% url 'esi_auth:logout' %}" class="logout-btn">Log Out</a>
-        </div>
-
-        {% else %}
-        <!-- Show this if the user is NOT logged in -->
-        <p>Please log in with EVE SSO to join the waitlist.</p>
-
-        <a href="{% url 'esi_auth:login' %}" class="login-btn">
-            Log In with EVE Online
-        </a>
+    <!-- All the admin/management buttons -->
+    <div class="button-group">
+        {% if user.is_staff %}
+        <a href="{% url 'admin:index' %}" class="admin-btn">Admin Panel</a>
+        <a href="{% url 'esi_auth:login' %}?scopes=fc" class="admin-btn fc-btn">Update FC Scopes</a>
         {% endif %}
+
+        <a href="{% url 'esi_auth:login' %}" class="admin-btn add-alt-btn">Add Character</a>
+        <a href="{% url 'esi_auth:logout' %}" class="logout-btn">Log Out</a>
     </div>
-</body>
-</html>
+
+    {% else %}
+    <!-- Show this if the user is NOT logged in -->
+    <p>Please log in with EVE SSO to join the waitlist.</p>
+
+    <a href="{% url 'esi_auth:login' %}" class="login-btn">
+        Log In with EVE Online
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
