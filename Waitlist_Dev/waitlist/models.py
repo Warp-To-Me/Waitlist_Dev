@@ -26,44 +26,6 @@ class EveCharacter(models.Model):
     def __str__(self):
         return self.character_name
 
-class ShipFit(models.Model):
-    """
-    Represents a single ship fit submitted to the waitlist.
-    """
-    class FitStatus(models.TextChoices):
-        PENDING = 'PENDING', 'Pending'
-        APPROVED = 'APPROVED', 'Approved'
-        DENIED = 'DENIED', 'Denied'
-        IN_FLEET = 'IN_FLEET', 'In Fleet'
-
-    # The character who submitted this fit
-    character = models.ForeignKey(
-        EveCharacter,
-        on_delete=models.CASCADE,
-        related_name="submitted_fits"
-    )
-    
-    # The raw fit string (EFT format or similar) pasted by the user
-    raw_fit = models.TextField(help_text="The ship fit in EFT (or similar) format.")
-    
-    # Status of the fit in the waitlist
-    status = models.CharField(
-        max_length=10,
-        choices=FitStatus.choices,
-        default=FitStatus.PENDING,
-        db_index=True # Good to index this for fast filtering
-    )
-
-    # Reason for denial, to be filled in by an FC
-    denial_reason = models.TextField(blank=True, null=True)
-
-    # Timestamps
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    last_updated = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.character.character_name} - {self.status} ({self.id})"
-
 class Fleet(models.Model):
     """
     Represents a fleet that a character can be invited to.
@@ -92,16 +54,65 @@ class FleetWaitlist(models.Model):
         on_delete=models.CASCADE,
         primary_key=True
     )
-    # A waitlist can have many fits, and a fit can (in theory) be on many lists
-    # But for this model, we'll assume a fit is only on one waitlist at a time.
-    # A ManyToManyField is more flexible.
-    approved_fits = models.ManyToManyField(
-        ShipFit,
-        related_name="waitlists",
-        blank=True
-    )
     
     is_open = models.BooleanField(default=True)
 
     def __str__(self):
         return f"Waitlist for {self.fleet.description}"
+
+class ShipFit(models.Model):
+    """
+    Represents a single ship fit submitted to the waitlist.
+    """
+    class FitStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        APPROVED = 'APPROVED', 'Approved'
+        DENIED = 'DENIED', 'Denied'
+        IN_FLEET = 'IN_FLEET', 'In Fleet'
+
+    # The character who submitted this fit
+    character = models.ForeignKey(
+        EveCharacter,
+        on_delete=models.CASCADE,
+        related_name="submitted_fits"
+    )
+    
+    # --- NEW: Link to a specific waitlist ---
+    waitlist = models.ForeignKey(
+        FleetWaitlist,
+        on_delete=models.CASCADE,
+        related_name="all_fits",
+        null=True # Allows for fits to exist without a waitlist (optional)
+    )
+    
+    # The raw fit string (EFT format or similar) pasted by the user
+    raw_fit = models.TextField(help_text="The ship fit in EFT (or similar) format.")
+    
+    # Status of the fit in the waitlist
+    status = models.CharField(
+        max_length=10,
+        choices=FitStatus.choices,
+        default=FitStatus.PENDING,
+        db_index=True # Good to index this for fast filtering
+    )
+
+    # Reason for denial, to be filled in by an FC
+    denial_reason = models.TextField(blank=True, null=True)
+
+    # Timestamps
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    # --- NEW: Placeholder fields for parsed data ---
+    ship_name = models.CharField(max_length=100, blank=True, null=True)
+    # --- THIS IS THE NEW FIELD ---
+    ship_type_id = models.BigIntegerField(blank=True, null=True)
+    # --- END NEW FIELD ---
+    tank_type = models.CharField(max_length=50, blank=True, null=True)
+    fit_issues = models.TextField(blank=True, null=True)
+    total_fleet_hours = models.IntegerField(default=0)
+    hull_fleet_hours = models.IntegerField(default=0)
+    # --- END NEW ---
+
+    def __str__(self):
+        return f"{self.character.character_name} - {self.status} ({self.id})"

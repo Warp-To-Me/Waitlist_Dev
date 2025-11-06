@@ -48,10 +48,8 @@
     <!-- but we can give them a link. -->
     <p>Welcome, <strong>{{ user.first_name }}</strong>!</p>
     <p>Loading waitlist...</p>
-    <script>
-        // This script will redirect if the view logic fails
-        window.location.href = "{% url 'waitlist:home' %}";
-    </script>
+    <script>// This script will redirect if the view logic fails
+        window.location.href = "{% url 'waitlist:home' %}";</script>
 
     {% else %}
     <!-- Show this if the user is NOT logged in -->

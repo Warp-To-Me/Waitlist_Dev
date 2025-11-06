@@ -2,11 +2,12 @@ from django.shortcuts import render, get_object_or_404, redirect, resolve_url
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime # --- Import datetime ---
 import json
 import requests # For handling HTTP errors during refresh
 # --- NEW IMPORT ---
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
+from django.template.loader import render_to_string # --- NEW IMPORT ---
 
 from waitlist.models import EveCharacter
 from .models import PilotSnapshot, EveGroup, EveType
@@ -272,4 +273,133 @@ def api_refresh_pilot(request, character_id):
 
     except Exception as e:
         # Something went wrong during the ESI calls
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+# --- NEW API VIEW FOR X-UP MODAL ---
+@login_required
+def api_get_implants(request):
+    """
+    Fetches and returns a character's implants as HTML
+    for the X-Up modal.
+    """
+    character_id = request.GET.get('character_id')
+    if not character_id:
+        return HttpResponseBadRequest("Missing character_id")
+
+    try:
+        character = EveCharacter.objects.get(character_id=character_id, user=request.user)
+    except EveCharacter.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Character not found or not yours."}, status=403)
+
+    esi = EsiClientProvider()
+    token = get_refreshed_token_for_character(request.user, character)
+    if not token:
+        logout(request)
+        return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
+        
+    # Check for correct scope
+    if 'esi-clones.read_implants.v1' not in [s.name for s in token.scopes.all()]:
+        return JsonResponse({"status": "error", "message": "Missing 'esi-clones.read_implants.v1' scope."}, status=403)
+
+    try:
+        # --- Make ESI call and get headers ---
+        implants_op = esi.client.Clones.get_characters_character_id_implants(
+            character_id=character_id,
+            token=token.access_token
+        )
+        implants_response = implants_op.results()
+        
+        # --- Get Expiry header ---
+        # ESI returns an 'Expires' header (e.g., 'Thu, 06 Nov 2025 10:12:13 GMT')
+        # We also get 'Cache-Control' (e.g., 'max-age=120')
+        # The 'X-Esi-Expires' header is easier to parse.
+        expires_str = implants_op.header.get('Expires', [None])[0]
+        expires_dt = None
+        expires_iso = None
+        if expires_str:
+            try:
+                # Parse the HTTP date string
+                expires_dt = datetime.strptime(expires_str, '%a, %d %b %Y %H:%M:%S %Z').replace(tzinfo=timezone.utc)
+                expires_iso = expires_dt.isoformat()
+            except ValueError:
+                expires_dt = timezone.now() + timedelta(minutes=2) # Fallback
+                expires_iso = expires_dt.isoformat()
+        else:
+            expires_dt = timezone.now() + timedelta(minutes=2) # Fallback
+            expires_iso = expires_dt.isoformat()
+
+        if not isinstance(implants_response, list):
+            raise Exception("Invalid implants response")
+
+        # --- SDE & Grouping Logic (same as pilot_detail) ---
+        all_implant_ids = implants_response # Response is just a list of IDs
+        enriched_implants = []
+        if all_implant_ids:
+            # --- We MUST cache missing SDE data here ---
+            cached_types = {t.type_id: t for t in EveType.objects.filter(type_id__in=all_implant_ids).select_related('group')}
+            cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
+            
+            missing_ids = [iid for iid in all_implant_ids if iid not in cached_types]
+            for implant_id in missing_ids:
+                try:
+                    type_data = esi.client.Universe.get_universe_types_type_id(type_id=implant_id).results()
+                    group_id = type_data['group_id']
+                    group = cached_groups.get(group_id)
+                    if not group:
+                        group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
+                        group = EveGroup.objects.create(group_id=group_id, name=group_data['name'])
+                        cached_groups[group.group_id] = group
+                    
+                    slot = None
+                    if 'dogma_attributes' in type_data:
+                        for attr in type_data['dogma_attributes']:
+                            if attr['attribute_id'] == 300: slot = int(attr['value']); break
+                    
+                    new_type = EveType.objects.create(type_id=implant_id, name=type_data['name'], group=group, slot=slot)
+                    cached_types[implant_id] = new_type
+                except Exception:
+                    continue # Skip this implant
+            # --- End SDE Cache ---
+
+            for implant_id in all_implant_ids:
+                if implant_id in cached_types:
+                    eve_type = cached_types[implant_id]
+                    enriched_implants.append({
+                        'name': eve_type.name,
+                        'slot': eve_type.slot if eve_type.slot else 0,
+                        'icon_url': f"https://images.evetech.net/types/{implant_id}/icon?size=32"
+                    })
+        
+        sorted_implants = sorted(enriched_implants, key=lambda i: i.get('slot', 0))
+        
+        implants_other = []
+        implants_col1 = [] # Slots 1-5
+        implants_col2 = [] # Slots 6-10
+        for implant in sorted_implants:
+            slot = implant.get('slot', 0)
+            if 0 < slot <= 5:
+                implants_col1.append(implant)
+            elif 5 < slot <= 10:
+                implants_col2.append(implant)
+            else:
+                implants_other.append(implant)
+        
+        context = {
+            'implants_other': implants_other,
+            'implants_col1': implants_col1,
+            'implants_col2': implants_col2,
+        }
+        
+        # Render the partial template to HTML
+        html = render_to_string('partials/_implant_list.html', context)
+        
+        # Return the HTML and the expiry time
+        return JsonResponse({
+            "status": "success",
+            "html": html,
+            "expires_iso": expires_iso
+        })
+
+    except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)

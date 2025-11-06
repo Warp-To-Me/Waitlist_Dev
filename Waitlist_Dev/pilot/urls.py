@@ -10,4 +10,7 @@ urlpatterns = [
     # --- NEW URL ---
     # This is the new background URL our JavaScript will call
     path('api/refresh/<int:character_id>/', views.api_refresh_pilot, name='api_refresh_pilot'),
+    
+    # --- NEW API URL FOR MODAL ---
+    path('api/get_implants/', views.api_get_implants, name='api_get_implants'),
 ]

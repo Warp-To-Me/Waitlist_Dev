@@ -16,11 +16,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import TemplateView # Make sure this is imported
+# from django.views.generic import TemplateView # <-- No longer needed
 
 urlpatterns = [
-    # Point the homepage to our new, unique template name
-    path('', TemplateView.as_view(template_name="homepage.html"), name='home'),
+    # --- MODIFIED: Point the root URL to our waitlist app ---
+    # OLD: path('', TemplateView.as_view(template_name="homepage.html"), name='home'),
+    path('', include('waitlist.urls')), # This handles the homepage now
     
     path('admin/', admin.site.urls),
     

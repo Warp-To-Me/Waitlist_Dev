@@ -7,15 +7,23 @@
     <!-- The title block can be overridden by child templates -->
     <title>{% block title %}EVE Waitlist{% endblock %}</title>
 
+    <!--
+    FIX: The main <style> tag now closes *before* the block,
+    so child templates can inject their own full <style> tags.
+    -->
     <style>
         /* --- GLOBAL STYLES --- */
+        :root {
+            --header-height: 60px; /* Define header height as a variable */
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             min-height: 100vh;
             background: #222;
             color: #eee;
             margin: 0;
-            padding-top: 80px; /* Make space for the fixed header */
+            padding-top: var(--header-height); /* Make space for the fixed header */
         }
 
         /* --- HEADER & DROPDOWN STYLES --- */
@@ -31,7 +39,8 @@
             background: #2a2a2a; /* Give it a background */
             padding: 10px 20px; /* Add some padding */
             border-bottom: 1px solid #444;
-            justify-content: flex-end; /* Align to the right */
+            height: var(--header-height); /* Set fixed height */
+            box-sizing: border-box; /* Include padding in height */
         }
 
         .profile-btn {
@@ -140,15 +149,267 @@
                 color: #fff;
             }
 
-        /* --- Child template styles will go here --- */
-        {
-            % block styles %
+        /* --- NEW: Header Button Styles --- */
+        /* These styles were moved from homepage.html */
+        .header-btn {
+            display: inline-block;
+            padding: 8px 16px; /* Match profile-btn */
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em; /* Match profile-btn */
+            transition: background-color 0.3s;
+            cursor: pointer; /* Make it look clickable */
+            border: none; /* For <button> elements */
         }
 
-        {
-            % endblock %
+        .logout-btn {
+            background-color: #993333;
         }
+
+            .logout-btn:hover {
+                background-color: #b33a3a;
+            }
+
+        .add-alt-btn {
+            background-color: #3b5998;
+        }
+
+            .add-alt-btn:hover {
+                background-color: #4e71bb;
+            }
+
+        /* --- NEW: X-UP Button Style --- */
+        .xup-btn {
+            background-color: #a67c00;
+            /* margin-left: 10px; <-- REMOVED */
+        }
+
+            .xup-btn:hover {
+                background-color: #c99900;
+            }
+
+            .xup-btn:disabled {
+                background-color: #555;
+                cursor: not-allowed;
+                opacity: 0.6;
+            }
+
+
+        /* --- NEW: X-UP MODAL STYLES --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+            .modal-overlay.show {
+                display: flex;
+            }
+
+        .modal-content {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 800px; /* Modal width */
+            display: flex;
+            flex-direction: column;
+            /* Max height for modal, enables scrolling */
+            max-height: 90vh;
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .modal-header h2 {
+                margin: 0;
+                color: #fff;
+            }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 1.5em;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+
+            .modal-close-btn:hover {
+                color: #fff;
+            }
+
+        .modal-body {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            overflow-y: auto; /* Allow modal body to scroll */
+        }
+
+        @media (min-width: 768px) {
+            .modal-body {
+                grid-template-columns: 2fr 1fr; /* Fit text vs implant list */
+            }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+            .form-group label {
+                font-weight: 600;
+                color: #ccc;
+            }
+
+            .form-group select,
+            .form-group textarea {
+                background: #333;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 10px;
+                color: #fff;
+                font-family: inherit;
+                font-size: 1em;
+            }
+
+            .form-group textarea {
+                min-height: 250px;
+                resize: vertical;
+            }
+
+        .implant-display {
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 340px; /* Match form height */
+            overflow-y: auto;
+        }
+
+            .implant-display h3 {
+                margin: 0 0 10px 0;
+                font-size: 1.1em;
+                color: #fff;
+                border-bottom: 1px solid #444;
+                padding-bottom: 10px;
+            }
+        /* Spinner for implant loading */
+        .implant-spinner {
+            width: 30px;
+            height: 30px;
+            border: 4px solid #555;
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Styles for the injected implant partial */
+        .implant-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .implant-item-modal {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px;
+            background: #3a3a3a;
+            border-radius: 5px;
+        }
+
+            .implant-item-modal img {
+                width: 32px;
+                height: 32px;
+                border-radius: 4px;
+                flex-shrink: 0;
+            }
+
+        .implant-info-modal {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .implant-slot-modal {
+            font-size: 0.7em;
+            font-weight: bold;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+
+        .implant-name-modal {
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .esi-timer {
+            font-size: 0.8em;
+            color: #999;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+            .modal-actions .header-btn:disabled {
+                background-color: #555;
+                cursor: not-allowed;
+                opacity: 0.6;
+            }
+        /* --- END NEW MODAL STYLES --- */
     </style>
+
+    <!--
+    This block is now *outside* the main <style> tag.
+    Child templates can inject their own <style>...</style> blocks here.
+    -->
+    {% block styles %}{% endblock %}
+
 </head>
 <body>
 
@@ -158,10 +419,20 @@
     <!-- --- SHARED USER HEADER --- -->
     <nav class="user-header">
 
-        <a href="{% url 'home' %}" class="profile-btn" style="margin-right: auto; background-color: #3b5998;">
+        <a href="{% url 'waitlist:home' %}" class="header-btn add-alt-btn">
             Home
         </a>
 
+        <!-- --- MOVED: X-Up button is now on the left --- -->
+        <!-- This button will be enabled/disabled by the waitlist_view.html template -->
+        <button type="button"
+                class="header-btn xup-btn"
+                id="xup-modal-button"
+                style="margin-right: auto;"
+                disabled>
+            X-Up
+        </button>
+        <!-- --- END MOVE --- -->
         <!-- The Profile button, its href will be updated by JS -->
         <a href="{% if main_char %}{% url 'pilot:pilot_detail' main_char.character_id %}{% endif %}"
            id="profile-link"
@@ -195,6 +466,12 @@
             </div>
         </div>
         {% endif %}
+
+        <!-- --- MODIFIED: Order restored --- -->
+        <a href="{% url 'esi_auth:login' %}" class="header-btn add-alt-btn">Add Character</a>
+        <a href="{% url 'esi_auth:logout' %}" class="header-btn logout-btn">Log Out</a>
+        <!-- --- END MODIFICATION --- -->
+
     </nav>
     {% endwith %}
     {% endif %}
@@ -205,6 +482,50 @@
         {% block content %}{% endblock %}
     </main>
     <!-- --- END MAIN CONTENT BLOCK --- -->
+    <!-- --- NEW: X-UP MODAL HTML --- -->
+    {% if user.is_authenticated %}
+    <div class="modal-overlay" id="xup-modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Submit Fit (X-Up)</h2>
+                <button class="modal-close-btn" id="xup-modal-close-btn">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Fit Form -->
+                <div class="form-group">
+                    <label for="xup-char-select">Character</label>
+                    <select id="xup-char-select" class="form-group">
+                        <option value="">-- Select Character --</option>
+                        {% for char in user_characters %}
+                        <option value="{{ char.character_id }}">{{ char.character_name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="xup-fit-textarea">Paste Fit (EFT Format)</label>
+                    <textarea id="xup-fit-textarea" placeholder="[Vargur, New Setup]&#10;..."></textarea>
+                </div>
+
+                <!-- Implant Display -->
+                <div class="implant-display">
+                    <h3>Implants</h3>
+                    <div id="xup-implant-container">
+                        <p style="color: #999; font-style: italic;">Select a character to load implants.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <span class="esi-timer" id="xup-esi-timer"></span>
+                <div class="modal-actions">
+                    <button class="header-btn add-alt-btn" id="xup-modal-cancel-btn">Cancel</button>
+                    <button class="header-btn xup-btn" id="xup-modal-submit-btn">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <!-- --- END NEW MODAL --- -->
     <!-- --- SHARED JAVASCRIPT --- -->
     <script>
         const dropdownToggleButton = document.getElementById('dropdown-toggle-button');
@@ -247,7 +568,174 @@
                 }
             });
         }
+
+        // --- NEW: X-UP MODAL JAVASCRIPT ---
+        // This timer variable will be shared
+        let esiCountdownInterval = null;
+
+        function startESITimer(expiresISO) {
+            // Clear any existing timer
+            if (esiCountdownInterval) {
+                clearInterval(esiCountdownInterval);
+            }
+
+            const timerElement = document.getElementById('xup-esi-timer');
+            if (!timerElement) return; // Exit if element not found
+
+            const expiresDate = new Date(expiresISO);
+
+            function updateTimer() {
+                const now = new Date();
+                const diffMs = expiresDate - now;
+
+                if (diffMs <= 0) {
+                    timerElement.textContent = "Cache expired. Refresh available.";
+                    clearInterval(esiCountdownInterval);
+                } else {
+                    const diffSecs = Math.floor(diffMs / 1000);
+                    const minutes = Math.floor(diffSecs / 60);
+                    const seconds = diffSecs % 60;
+                    timerElement.textContent = `Implant cache expires in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }
+
+            updateTimer(); // Run once immediately
+            esiCountdownInterval = setInterval(updateTimer, 1000); // Update every second
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const openModalBtn = document.getElementById('xup-modal-button');
+            const modalOverlay = document.getElementById('xup-modal-overlay');
+            const closeModalBtn = document.getElementById('xup-modal-close-btn');
+            const cancelModalBtn = document.getElementById('xup-modal-cancel-btn');
+            const submitModalBtn = document.getElementById('xup-modal-submit-btn');
+            const charSelect = document.getElementById('xup-char-select');
+            const fitTextarea = document.getElementById('xup-fit-textarea');
+            const implantContainer = document.getElementById('xup-implant-container');
+            const timerElement = document.getElementById('xup-esi-timer');
+
+            // Check if all modal elements exist (they only do for logged-in users)
+            if (!modalOverlay || !openModalBtn) {
+                return;
+            }
+
+            const openModal = () => modalOverlay.classList.add('show');
+            const closeModal = () => {
+                modalOverlay.classList.remove('show');
+                // Clear timer when modal closes
+                if (esiCountdownInterval) {
+                    clearInterval(esiCountdownInterval);
+                }
+                if(timerElement) {
+                    timerElement.textContent = "";
+                }
+            };
+
+            openModalBtn.addEventListener('click', openModal);
+            closeModalBtn.addEventListener('click', closeModal);
+            cancelModalBtn.addEventListener('click', closeModal);
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    closeModal();
+                }
+            });
+
+            // Handle character selection
+            charSelect.addEventListener('change', () => {
+                const charId = charSelect.value;
+
+                // Clear old timer
+                if (esiCountdownInterval) {
+                    clearInterval(esiCountdownInterval);
+                }
+                if(timerElement) {
+                    timerElement.textContent = "";
+                }
+
+                if (!charId) {
+                    implantContainer.innerHTML = '<p style="color: #999; font-style: italic;">Select a character to load implants.</p>';
+                    return;
+                }
+
+                // Show loading spinner
+                implantContainer.innerHTML = '<div class="implant-spinner"></div>';
+
+                // Fetch implants
+                fetch(`{% url 'pilot:api_get_implants' %}?character_id=${charId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch implants. Check scopes?');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            implantContainer.innerHTML = data.html;
+                            // Start the ESI cache timer
+                            startESITimer(data.expires_iso);
+                        } else {
+                            throw new Error(data.message || 'Unknown error');
+                        }
+                    })
+                    .catch(error => {
+                        implantContainer.innerHTML = `<p style="color: #ff8a8a;">Error: ${error.message}</p>`;
+                    });
+            });
+
+            // Handle fit submission
+            submitModalBtn.addEventListener('click', () => {
+                const charId = charSelect.value;
+                const rawFit = fitTextarea.value;
+
+                if (!charId) {
+                    // Use a more modern notification if possible, but alert is fine for now
+                    alert('Please select a character.');
+                    return;
+                }
+                if (!rawFit) {
+                    alert('Please paste a fit.');
+                    return;
+                }
+
+                submitModalBtn.disabled = true;
+                submitModalBtn.textContent = 'Submitting...';
+
+                const formData = new FormData();
+                formData.append('character_id', charId);
+                formData.append('raw_fit', rawFit);
+
+                fetch("{% url 'waitlist:api_submit_fit' %}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': "{{ csrf_token }}",
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        closeModal();
+                        // The live polling will automatically pick up the new fit!
+                        // We can also reset the form
+                        fitTextarea.value = "";
+                        charSelect.selectedIndex = 0;
+                        implantContainer.innerHTML = '<p style="color: #999; font-style: italic;">Select a character to load implants.</p>';
+                    } else {
+                        alert(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    alert(`Network Error: ${error.message}`);
+                })
+                .finally(() => {
+                    submitModalBtn.disabled = false;
+                    submitModalBtn.textContent = 'Submit';
+                });
+            });
+        });
     </script>
+
 
     <!-- Child template scripts will go here -->
     {% block scripts %}{% endblock %}
