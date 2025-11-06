@@ -98,6 +98,15 @@ def pilot_detail(request, character_id):
             ).results()
 
             # --- THIS IS THE FIX ---
+            # We were missing the ESI call to get implants.
+            implants_response = esi.client.Clones.get_characters_character_id_implants(
+                character_id=character_id,
+                token=token.access_token
+            ).results()
+            # --- END FIX ---
+
+
+            # --- THIS IS THE FIX ---
             # We must check if the response is valid before saving it.
             # If the token is bad, ESI returns an error JSON, not an exception.
             if 'skills' not in skills_response or 'total_sp' not in skills_response:

@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
+{% load humanize %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -6,17 +7,19 @@
     <title>{{ character.character_name }} - Pilot Details</title>
     <style>
         body {
-            font-family: sans-serif;
-            background: #222;
-            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #1a1a1a; /* Darker background */
+            color: #f0f0f0; /* Lighter text */
             padding: 20px;
+            line-height: 1.6;
         }
         .container {
             max-width: 900px;
             margin: 0 auto;
-            background: #333;
+            background: #2a2a2a; /* Slightly lighter card background */
             border-radius: 8px;
             padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         .header {
             display: flex;
@@ -32,55 +35,129 @@
         .header h1 {
             margin: 0;
             font-size: 2.5em;
+            color: #fff;
         }
         .info {
             font-size: 1.1em;
             color: #ccc;
         }
+        .info strong {
+            color: #fff;
+            font-weight: 600;
+        }
+        .info small {
+            color: #999;
+        }
+
         .section {
-            margin-top: 20px;
+            margin-top: 25px;
         }
         .section h2 {
             border-bottom: 1px solid #444;
-            padding-bottom: 5px;
+            padding-bottom: 10px;
+            font-size: 1.8em;
+            color: #fff;
         }
+
+        /* Implant Styles */
         .implant-list {
             display: flex;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
             gap: 10px;
             padding: 10px;
-            background: #2a2a2a;
+            background: #222; /* Darker inlay */
             border-radius: 5px;
         }
         .implant-list img {
             border-radius: 5px;
+            width: 32px; /* Standard size */
+            height: 32px;
+            transition: transform 0.2s ease;
         }
+        .implant-list img:hover {
+            transform: scale(1.1);
+        }
+
+        /* --- NEW SKILL EXPANDO STYLES --- */
+
+        /* Style for the 'details' container */
+        .skill-group {
+            background: #333;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            border: 1px solid #444;
+            overflow: hidden; /* Ensures rounded corners on children */
+        }
+
+        /* Style for the 'summary' (the clickable part) */
+        .skill-group-header {
+            padding: 12px 15px;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+            user-select: none; /* Prevents text selection on click */
+        }
+
+        /* Style for the arrow icon */
+        .skill-group-header::after {
+            content: '►'; /* Collapsed state */
+            font-size: 0.8em;
+            transition: transform 0.2s ease;
+        }
+
+        /* Open state styles */
+        .skill-group[open] > .skill-group-header {
+            background-color: #4e71bb; /* Highlight color when open */
+            color: #fff;
+        }
+
+        .skill-group[open] > .skill-group-header::after {
+            transform: rotate(90deg); /* Rotated arrow */
+        }
+
+        /* The list of skills inside */
         .skill-list {
             list-style: none;
-            padding: 0;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 10px;
+            padding: 10px 15px 15px 15px;
+            margin: 0;
+            background: #2a2a2a; /* Slightly darker to contrast with header */
+            border-top: 1px solid #444;
         }
+
         .skill-item {
-            background: #2a2a2a;
-            padding: 10px;
-            border-radius: 5px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #3a3a3a;
         }
-        .skill-item img {
-            width: 32px;
-            height: 32px;
+        
+        .skill-item:last-child {
+            border-bottom: none;
         }
+
         .skill-name {
-            font-weight: bold;
-            flex-grow: 1;
+            font-weight: 500;
+            color: #ddd;
         }
+
         .skill-level {
-            font-size: 1.2em;
-            font-weight: bold;
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #fff;
+            background: #444;
+            padding: 2px 8px;
+            border-radius: 4px;
+            min-width: 50px; /* Ensures alignment */
+            text-align: center;
         }
+
+        /* --- END NEW STYLES --- */
+
         .home-link {
             display: inline-block;
             margin-top: 20px;
@@ -100,7 +177,7 @@
             <div>
                 <h1>{{ character.character_name }}</h1>
                 <p class="info">
-                    Total SP: {{ total_sp|floatformat:0 }}<br>
+                    <strong>Total SP:</strong> {{ total_sp|intcomma }}<br>
                     <small>Snapshot as of: {{ snapshot_time }}</small>
                 </p>
             </div>
@@ -110,7 +187,12 @@
             <h2>Implants</h2>
             <div class="implant-list">
                 {% for implant in implants %}
-                    <img src="{{ implant.icon_url }}" alt="Implant {{ implant.type_id }}" title="Implant {{ implant.type_id }}">
+                    <!-- We still don't have implant names, but we can get them
+                         from the EVE SDE (Static Data Export) later if needed.
+                         For now, the icon with a title is good. -->
+                    <img src="{{ implant.icon_url }}" 
+                         alt="Implant {{ implant.type_id }}" 
+                         title="Implant ID: {{ implant.type_id }}">
                 {% empty %}
                     <p>No implants found.</p>
                 {% endfor %}
@@ -119,24 +201,67 @@
 
         <div class="section">
             <h2>Skills</h2>
-            <ul class="skill-list">
-                {% for skill in skills %}
-                    <li class="skill-item">
-                        <!-- We use the type_id to get the icon. We don't have the name,
-                             but we could add another ESI call to get it (slow) or
-                             use a static data export (complex).
-                             For now, we'll just show the icon and level. -->
-                        <img src="https://images.evetech.net/types/{{ skill.skill_id }}/icon?size=32" alt="Skill Icon">
-                        <span class="skill-name">Skill ID: {{ skill.skill_id }}</span>
-                        <span class="skill-level">Level {{ skill.active_skill_level }}</span>
-                    </li>
+            
+            <!-- 
+              NEW EXPANDO SKILL LIST
+              We loop through the 'grouped_skills' dictionary.
+              'group_name' will be "Gunnery", "Spaceship Command", etc.
+              'skill_list' will be the list of skill objects.
+            -->
+            <div class="skill-groups-container">
+                {% for group_name, skill_list in grouped_skills.items %}
+                    <details class="skill-group">
+                        <summary class="skill-group-header">{{ group_name }}</summary>
+                        <ul class="skill-list">
+                            {% for skill in skill_list %}
+                                <li class="skill-item">
+                                    <span class="skill-name">{{ skill.name }}</span>
+                                    <!-- 
+                                      We can use a simple template `if` to style
+                                      level 5 skills to make them stand out.
+                                    -->
+                                    <span class="skill-level" 
+                                          {% if skill.level == 5 %}
+                                          style="background-color: #b3a100; color: #000;"
+                                          {% endif %}>
+                                        Level {{ skill.level }}
+                                    </span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
                 {% empty %}
-                    <li>No skills found.</li>
+                    <p>No skills found for this pilot.</p>
                 {% endfor %}
-            </ul>
+            </div>
         </div>
         
         <a href="{% url 'home' %}" class="home-link">&larr; Back to Homepage</a>
     </div>
+
+    <script>
+        // Simple script to make the skill groups act like an accordion
+        // (i.e., only one is open at a time).
+        
+        // 1. Get all the <details> elements
+        const allSkillGroups = document.querySelectorAll('.skill-group');
+
+        // 2. Add a click event listener to each one
+        allSkillGroups.forEach(group => {
+            group.addEventListener('toggle', event => {
+                // 3. If this group is being OPENED...
+                if (group.open) {
+                    // 4. ...loop through all groups...
+                    allSkillGroups.forEach(otherGroup => {
+                        // 5. ...and close any that isn't this one.
+                        if (otherGroup !== group && otherGroup.open) {
+                            otherGroup.open = false;
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+
 </body>
 </html>
