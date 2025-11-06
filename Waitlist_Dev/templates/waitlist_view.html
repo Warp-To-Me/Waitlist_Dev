@@ -1,107 +1,110 @@
 {% extends "base.html" %}
 {% load humanize %}
+
+<!-- This sets the page title -->
 {% block title %}EVE Waitlist - View{% endblock %}
 
-<!--
-FIX: These styles are now wrapped in their own <style> tag
-so they can be correctly injected into the base.html <head>.
--->
+
+<!-- These styles are specific to the waitlist view -->
 {% block styles %}
 <style>
-    /* --- GRID LAYOUT --- */
     .waitlist-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 15px;
-        padding: 20px;
-        max-width: 100%;
-        box-sizing: border-box;
+        display: flex;
+        flex-direction: row;
+        gap: 10px;
+        padding: 10px;
+        /* Allow horizontal scrolling on small screens */
+        overflow-x: auto;
+        /* Set a height so vertical scrollbars appear inside columns */
+        height: calc(100vh - var(--header-height) - 20px); /* Full height minus header */
     }
 
     .waitlist-column {
-        background: #2a2a2a;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        /* Min-height ensures empty columns still appear */
-        min-height: 200px;
+        flex: 1 0 300px; /* Flex-grow, flex-shrink, flex-basis (min-width) */
+        min-width: 300px;
+        max-width: 340px;
         display: flex;
         flex-direction: column;
+        background: #2a2a2a;
+        border-radius: 8px;
+        /* Handle vertical overflow */
+        height: 100%;
     }
 
-    /* --- COLUMN HEADER --- */
     .column-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 10px 15px;
-        border-bottom: 1px solid #444;
-        border-radius: 8px 8px 0 0;
+        border-bottom: 2px solid #444;
     }
 
         .column-header h2 {
             margin: 0;
-            font-size: 1.3em;
+            font-size: 1.2em;
             color: #fff;
         }
 
     .column-count {
-        font-size: 1.1em;
+        font-size: 1.2em;
         font-weight: bold;
-        background: #333;
+        background: #444;
         color: #fff;
-        padding: 4px 10px;
+        padding: 2px 8px;
         border-radius: 5px;
     }
-    /* Header colors */
+
+    /* Column Header Colors */
     .status-PENDING {
-        background-color: #a67c00;
+        border-top: 3px solid #ffc107;
     }
 
     .status-APPROVED {
-        background-color: #339966;
+        border-top: 3px solid #28a745;
     }
 
-    .status-IN_FLEET {
-        background-color: #3b5998;
-    }
-
-
-    /* --- FIT CARD LIST --- */
     .fit-card-list {
         list-style: none;
         padding: 10px;
         margin: 0;
-        /* Make the list fill the column */
-        flex-grow: 1;
+        /* Make the list scrollable, not the whole column */
+        overflow-y: auto;
+        height: 100%;
     }
 
-    /* --- FIT CARD --- */
+        /* Scrollbar styling */
+        .fit-card-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .fit-card-list::-webkit-scrollbar-track {
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+
+        .fit-card-list::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+
+            .fit-card-list::-webkit-scrollbar-thumb:hover {
+                background: #666;
+            }
+
+
     .fit-card {
         background: #333;
         border: 1px solid #444;
-        border-radius: 6px;
-        padding: 12px;
+        border-radius: 5px;
         margin-bottom: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-
-        .fit-card.status-PENDING {
-            border-left: 4px solid #a67c00;
-        }
-
-        .fit-card.status-APPROVED {
-            border-left: 4px solid #339966;
-        }
-
-        .fit-card.status-IN_FLEET {
-            border-left: 4px solid #3b5998;
-        }
 
     .card-header {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding-bottom: 10px;
+        padding: 10px;
         border-bottom: 1px solid #444;
     }
 
@@ -109,145 +112,178 @@ so they can be correctly injected into the base.html <head>.
         width: 48px;
         height: 48px;
         border-radius: 5px;
+        border: 1px solid #555;
     }
 
     .pilot-name {
-        font-size: 1.1em;
         font-weight: 600;
+        font-size: 1.1em;
         color: #fff;
-        /* Allow name to shrink but not grow */
-        flex-shrink: 1;
-        min-width: 0;
+        /* Prevent long names from breaking layout */
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    /* --- NEW: Wait Timer --- */
+    /* --- NEW: Wait Timer Style --- */
     .wait-timer {
-        font-size: 0.9em;
-        font-weight: 600;
-        color: #ccc;
-        background-color: #2a2a2a;
-        padding: 4px 8px;
-        border-radius: 5px;
-        /* Pushes timer to the far right */
+        font-size: 0.8em;
+        font-weight: bold;
+        color: #ffc107; /* Yellow */
         margin-left: auto;
+        padding: 2px 6px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 4px;
     }
-    /* --- END NEW --- */
 
     .card-body {
-        padding-top: 10px;
+        padding: 10px;
         font-size: 0.9em;
     }
 
-    /* --- MODIFIED: Fit Info (Left Aligned) --- */
-    .fit-info {
-        display: flex;
-        /* justify-content: space-between; <-- REMOVED */
-        margin-bottom: 5px;
-        gap: 5px; /* Added gap */
-    }
-
-        .fit-info strong,
-        .fit-issues strong {
-            color: #aaa;
-            flex-shrink: 0; /* Prevent "HULL:" from shrinking */
-        }
-
-        .fit-info .placeholder {
-            color: #fff;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-    /* --- NEW: Card Body Grid --- */
-    .card-body-grid {
+    /* --- NEW: Layout for fit info + ship image --- */
+    .card-body-row {
         display: flex;
         justify-content: space-between;
         gap: 10px;
     }
 
-    .fit-details-left {
-        flex-grow: 1;
-        min-width: 0; /* Prevents flex overflow */
+    .card-fit-details {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1; /* Take up available space */
+        min-width: 0; /* Allow shrinking */
     }
 
-    .fit-ship-right {
-        flex-shrink: 0;
+    .ship-image-container {
+        flex-shrink: 0; /* Don't shrink */
     }
 
-    .ship-hull-img {
-        width: 64px;
-        height: 64px;
-    }
+        .ship-image-container img {
+            width: 64px;
+            height: 64px;
+        }
     /* --- END NEW --- */
 
 
-    .fit-issues {
-        margin-top: 10px;
-        color: #ff8a8a; /* Red for issues */
+    .fit-info {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+        /* --- MODIFIED: Justify left --- */
+        justify-content: flex-start;
+        gap: 5px;
     }
 
-        .fit-issues .placeholder {
+        .fit-info strong {
+            color: #aaa;
+            flex-shrink: 0;
+        }
+
+        .fit-info .placeholder {
+            color: #ddd;
             font-weight: 500;
+            /* --- Allow text to wrap --- */
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            /* --- Justify left --- */
+            text-align: left;
+        }
+
+    .fit-issues {
+        margin-top: 8px;
+        font-size: 0.85em;
+    }
+
+        .fit-issues strong {
+            color: #ffc107;
+        }
+        /* Yellow */
+        .fit-issues .placeholder {
+            color: #ffc107;
         }
 
     .pilot-stats {
-        display: flex;
-        gap: 15px;
-        margin-top: 10px;
-        padding-top: 10px;
+        margin-top: 8px;
+        padding-top: 8px;
         border-top: 1px solid #444;
+        display: flex;
+        justify-content: space-around;
+        font-size: 0.8em;
     }
 
     .stat-item {
-        color: #ccc;
+        text-align: center;
     }
 
-    /* --- FC ACTION STYLES (MODIFIED) --- */
+        .stat-item strong {
+            color: #aaa;
+        }
+
+        .stat-item .placeholder {
+            color: #ddd;
+            font-weight: 600;
+        }
+
+    /* --- NEW: FC Action Bar --- */
     .fc-actions {
-        margin-top: 15px;
-        padding-top: 10px;
-        border-top: 1px solid #444;
         display: flex;
-        gap: 10px;
-        justify-content: flex-end; /* --- Align buttons to the right --- */
+        gap: 5px;
+        border-top: 1px solid #444;
+        padding: 8px 10px 5px 10px;
+        margin-top: 10px;
+        /* --- MODIFIED: Align buttons to the right --- */
+        justify-content: flex-end;
     }
 
     .fc-btn {
-        /* --- REMOVED flex: 1; --- */
-        padding: 6px 10px; /* --- Adjusted padding --- */
-        font-size: 1.1em; /* --- Adjusted font size for emoji --- */
-        font-weight: 600;
-        color: #fff;
-        text-align: center;
+        background: #555;
         border: none;
         border-radius: 5px;
+        color: #fff;
+        font-weight: bold;
         cursor: pointer;
-        transition: all 0.2s;
-        line-height: 1; /* --- Ensure emoji fits well --- */
+        padding: 5px 8px;
+        /* --- MODIFIED: Slightly larger emoji --- */
+        font-size: 1.1em;
+        line-height: 1;
+        transition: background-color 0.2s, transform 0.1s;
     }
 
+        .fc-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .fc-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
     .btn-approve {
-        background-color: #339966;
+        background-color: #28a745;
     }
 
         .btn-approve:hover {
-            background-color: #3caa73;
+            background-color: #34c254;
         }
 
     .btn-deny {
-        background-color: #993333;
+        background-color: #dc3545;
     }
 
         .btn-deny:hover {
-            background-color: #b33a3a;
+            background-color: #e64a58;
         }
-    /* --- END MODIFIED STYLES --- */
 
+
+    .waitlist-closed-msg {
+        color: #aaa;
+        font-style: italic;
+        padding: 20px;
+        text-align: center;
+    }
 </style>
 {% endblock %}
 
@@ -258,7 +294,6 @@ This container will be the target for our live polling.
 It will be filled by the partial template on page load.
 -->
 <div class="waitlist-container" id="waitlist-container-live">
-    <!-- --- FIX: Updated include path --- -->
     {% include "_waitlist_columns.html" %}
 </div>
 {% endblock %}
@@ -272,150 +307,133 @@ It will be filled by the partial template on page load.
     // --- CSRF Token for all API requests ---
     const csrfToken = "{{ csrf_token }}";
 
-    // --- Waitlist Container ---
-    const waitlistContainer = document.getElementById('waitlist-container-live');
+    // --- 1. FC ACTION HANDLER ---
 
-    // ===================================
-    // 1. FC ACTION (APPROVE/DENY)
-    // ===================================
-
-    // We attach the listener to the container, not the buttons.
-    // This is "event delegation" and it's essential for
-    // dynamically added content.
-    waitlistContainer.addEventListener('click', function(event) {
+    function handleFCAction(event) {
         // Find the button that was clicked
         const button = event.target.closest('.fc-btn');
-
-        // If the click wasn't on a button, do nothing
-        if (!button) {
-            return;
-        }
+        if (!button) return; // Click wasn't on a button
 
         const fitId = button.dataset.fitId;
         const action = button.dataset.action;
         const card = document.getElementById(`fit-card-${fitId}`);
 
-        if (!fitId || !action) {
-            return;
-        }
+        // Disable all buttons on this card to prevent double-clicks
+        card.querySelectorAll('.fc-btn').forEach(btn => btn.disabled = true);
 
-        // Disable button to prevent double clicks
-        button.disabled = true;
-
-        // Prepare data for the API
         const formData = new FormData();
         formData.append('fit_id', fitId);
         formData.append('action', action);
 
-        // Send the API request
         fetch("{% url 'waitlist:api_update_fit_status' %}", {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest' // Helps Django identify AJAX
+                'X-Requested-With': 'XMLHttpRequest'
             },
             body: formData
         })
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Success! Remove the card from the view.
-                if (card) {
-                    card.style.transition = 'opacity 0.3s ease';
-                    card.style.opacity = '0';
-                    setTimeout(() => card.remove(), 300);
+                // --- FIX: Only remove on 'deny' ---
+                // Let the poller handle moving 'approved' fits
+                if (action === 'deny') {
+                    card.remove();
+                } else {
+                    // Optional: show a temporary "approved" state
+                    // For now, we just leave buttons disabled
                 }
+                // --- END FIX ---
             } else {
-                // Handle error (e.g., show a message)
-                console.error('Failed to update fit:', data.message);
-                button.disabled = false; // Re-enable button on failure
+                // Re-enable buttons on failure
+                card.querySelectorAll('.fc-btn').forEach(btn => btn.disabled = false);
+                alert(`Error: ${data.message}`);
             }
         })
         .catch(error => {
-            console.error('Network error:', error);
-            button.disabled = false; // Re-enable button on failure
+            // Re-enable buttons on failure
+            card.querySelectorAll('.fc-btn').forEach(btn => btn.disabled = false);
+            alert(`Network Error: ${error.message}`);
         });
-    });
+    }
 
-    // ===================================
-    // 2. WAITLIST TIMER (Updates every 30s)
-    // ===================================
+    // --- 2. TIMER AND LIVE POLLING ---
 
+    const waitlistContainer = document.getElementById('waitlist-container-live');
+    let pollingInterval = null;
+    let timerInterval = null;
+
+    // This function updates all timers on the page
     function updateWaitTimers() {
-        const now_utc = new Date();
+        const fitCards = waitlistContainer.querySelectorAll('.fit-card');
+        const now = new Date();
 
-        waitlistContainer.querySelectorAll('.fit-card').forEach(card => {
-            const timerElement = card.querySelector('.wait-timer');
-            if (!timerElement) return;
+        fitCards.forEach(card => {
+            const timerEl = card.querySelector('.wait-timer');
+            const submittedTime = new Date(card.dataset.submittedTime);
 
-            const submittedISO = card.dataset.submittedTime;
-            if (!submittedISO) return;
+            const diffMs = now - submittedTime;
+            const diffMins = Math.floor(diffMs / 60000); // Total minutes
 
-            const submittedDate = new Date(submittedISO);
-
-            // Calculate difference in minutes
-            const diffMs = now_utc - submittedDate;
-            const diffMins = Math.floor(diffMs / 60000); // 60 * 1000
-
-            if (diffMins < 0) {
-                timerElement.textContent = "0m";
-            } else {
-                timerElement.textContent = `${diffMins}m`;
+            if (timerEl) {
+                timerEl.textContent = `${diffMins}m`;
             }
         });
     }
 
-    // Run timers on page load
-    updateWaitTimers();
-    // And run them again every 30 seconds
-    setInterval(updateWaitTimers, 30000);
+    // This function fetches the new HTML
+    function fetchWaitlistHTML() {
+        fetch("{% url 'waitlist:api_get_waitlist_html' %}")
+            .then(response => {
+                if (response.ok) {
+                    return response.text();
+                }
+                throw new Error('Waitlist closed or error');
+            })
+            .then(html => {
+                // --- This is the key: replace the content ---
+                waitlistContainer.innerHTML = html;
 
-
-    // ===================================
-    // 3. LIVE POLLING (Updates every 5s)
-    // ===================================
-
-    function fetchLatestWaitlist() {
-        fetch("{% url 'waitlist:api_get_waitlist_html' %}", {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => {
-            if (response.ok) {
-                return response.text();
-            }
-            throw new Error('Waitlist fetch failed.');
-        })
-        .then(html => {
-            // This is the key:
-            // 1. We get the current scroll position
-            const scrollY = window.scrollY;
-
-            // 2. We replace the *entire* HTML of the container
-            waitlistContainer.innerHTML = html;
-
-            // 3. We re-run the timer function immediately
-            updateWaitTimers();
-
-            // 4. We restore the scroll position so the user's
-            //    screen doesn't jump.
-            window.scrollTo(0, scrollY);
-        })
-        .catch(error => {
-            // Don't show an error, just log it.
-            // This could happen if the waitlist closes.
-            console.warn('Live update poll failed:', error.message);
-        });
+                // After redrawing, re-update the timers immediately
+                updateWaitTimers();
+            })
+            .catch(error => {
+                // Waitlist is probably closed
+                waitlistContainer.innerHTML = `<p class="waitlist-closed-msg">Waitlist is currently closed. The page will refresh when it opens.</p>`;
+            });
     }
 
-    // Start the live polling, 5 seconds after page load
-    setTimeout(() => {
-        fetchLatestWaitlist(); // Run once
-        setInterval(fetchLatestWaitlist, 5000); // Then run every 5s
-    }, 5000);
+    // This function sets up all our event listeners
+    function initializeWaitlist() {
+        // Attach FC Action listener
+        waitlistContainer.addEventListener('click', handleFCAction);
+
+        // Run timers
+        updateWaitTimers(); // Run once on load
+        if (timerInterval) clearInterval(timerInterval); // Clear old timer
+        timerInterval = setInterval(updateWaitTimers, 10000); // Update timers every 10s
+
+        // Start live polling
+        if (pollingInterval) clearInterval(pollingInterval); // Clear old poller
+        pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
+    }
+
+    // --- 3. PAGE INITIALIZATION ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Enable the X-Up button (it's disabled by default in base.html)
+        // We do this here so it's only enabled if the page loads correctly.
+        const xupButton = document.getElementById('xup-modal-button');
+        const openWaitlist = {{ open_waitlist.pk|default:"null" }};
+
+        if (xupButton && openWaitlist !== null) {
+            xupButton.disabled = false;
+        }
+
+        // Start all the interactive parts
+        initializeWaitlist();
+    });
 
 </script>
 {% endblock %}
-<!-- --- END NEW JAVASCRIPT --- -->

@@ -23,10 +23,10 @@ by the polling JavaScript.
                 <span class="wait-timer"></span>
             </div>
 
-            <!-- --- MODIFIED: Card Body Layout --- -->
             <div class="card-body">
-                <div class="card-body-grid">
-                    <div class="fit-details-left">
+                <!-- --- NEW LAYOUT: Text on left, Image on right --- -->
+                <div class="card-body-row">
+                    <div class="card-fit-details">
                         <div class="fit-info">
                             <strong>HULL:</strong>
                             <span class="placeholder">{{ fit.ship_name|default:"-" }}</span>
@@ -40,47 +40,47 @@ by the polling JavaScript.
                             <strong>ISSUES:</strong>
                             <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span>
                         </div>
+
+                        <div class="pilot-stats">
+                            <div class="stat-item">
+                                <strong>TOTAL HRS:</strong>
+                                <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <strong>HULL HRS:</strong>
+                                <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="fit-ship-right">
+
+                    <!-- NEW: Ship Image Container -->
+                    <div class="ship-image-container">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
-                             alt="{{ fit.ship_name|default:"Hull" }} hull"
-                             class="ship-hull-img">
+                             alt="{{ fit.ship_name }} hull">
                         {% endif %}
                     </div>
                 </div>
-
-                <div class="pilot-stats">
-                    <div class="stat-item">
-                        <strong>TOTAL HRS:</strong>
-                        <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>HULL HRS:</strong>
-                        <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
-                    </div>
+                <!-- --- END NEW LAYOUT --- -->
+                <!-- --- FC ACTION BUTTONS (MODIFIED) --- -->
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-approve"
+                            data-fit-id="{{ fit.id }}"
+                            data-action="approve"
+                            title="Approve Fit">
+                        &#x2705; <!-- Checkmark emoji -->
+                    </button>
+                    <button class="fc-btn btn-deny"
+                            data-fit-id="{{ fit.id }}"
+                            data-action="deny"
+                            title="Deny Fit">
+                        &#x274C; <!-- Cross mark emoji -->
+                    </button>
                 </div>
+                {% endif %}
+                <!-- --- END MODIFIED --- -->
             </div>
-            <!-- --- END MODIFIED --- -->
-            <!-- --- FC ACTION BUTTONS (MODIFIED) --- -->
-            {% if is_fc %}
-            <div class="fc-actions">
-                <button class="fc-btn btn-approve"
-                        data-fit-id="{{ fit.id }}"
-                        data-action="approve"
-                        title="Approve Fit">
-                    &#x2705; <!-- Checkmark emoji -->
-                </button>
-                <button class="fc-btn btn-deny"
-                        data-fit-id="{{ fit.id }}"
-                        data-action="deny"
-                        title="Deny Fit">
-                    &#x274C; <!-- Cross mark emoji -->
-                </button>
-            </div>
-            {% endif %}
-            <!-- --- END MODIFIED --- -->
-
         </li>
         {% endfor %}
     </ul>
@@ -104,10 +104,10 @@ by the polling JavaScript.
                 <span class="wait-timer"></span>
             </div>
 
-            <!-- --- MODIFIED: Card Body Layout --- -->
             <div class="card-body">
-                <div class="card-body-grid">
-                    <div class="fit-details-left">
+                <!-- --- NEW LAYOUT: Text on left, Image on right --- -->
+                <div class="card-body-row">
+                    <div class="card-fit-details">
                         <div class="fit-info">
                             <strong>HULL:</strong>
                             <span class="placeholder">{{ fit.ship_name|default:"-" }}</span>
@@ -121,41 +121,41 @@ by the polling JavaScript.
                             <strong>ISSUES:</strong>
                             <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span>
                         </div>
+
+                        <div class="pilot-stats">
+                            <div class="stat-item">
+                                <strong>TOTAL HRS:</strong>
+                                <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <strong>HULL HRS:</strong>
+                                <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="fit-ship-right">
+
+                    <!-- NEW: Ship Image Container -->
+                    <div class="ship-image-container">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
-                             alt="{{ fit.ship_name|default:"Hull" }} hull"
-                             class="ship-hull-img">
+                             alt="{{ fit.ship_name }} hull">
                         {% endif %}
                     </div>
                 </div>
-
-                <div class="pilot-stats">
-                    <div class="stat-item">
-                        <strong>TOTAL HRS:</strong>
-                        <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>HULL HRS:</strong>
-                        <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
-                    </div>
+                <!-- --- END NEW LAYOUT --- -->
+                <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-deny"
+                            data-fit-id="{{ fit.id }}"
+                            data-action="deny"
+                            title="Remove from Waitlist">
+                        &#x274C; <!-- Cross mark emoji -->
+                    </button>
                 </div>
+                {% endif %}
+                <!-- --- END NEW --- -->
             </div>
-            <!-- --- END MODIFIED --- -->
-            <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
-            {% if is_fc %}
-            <div class="fc-actions">
-                <button class="fc-btn btn-deny"
-                        data-fit-id="{{ fit.id }}"
-                        data-action="deny"
-                        title="Remove from Waitlist">
-                    &#x274C; <!-- Cross mark emoji -->
-                </button>
-            </div>
-            {% endif %}
-            <!-- --- END NEW --- -->
-
         </li>
         {% endfor %}
     </ul>
@@ -181,10 +181,10 @@ by the polling JavaScript.
                 <span class="wait-timer"></span>
             </div>
 
-            <!-- --- MODIFIED: Card Body Layout --- -->
             <div class="card-body">
-                <div class="card-body-grid">
-                    <div class="fit-details-left">
+                <!-- --- NEW LAYOUT: Text on left, Image on right --- -->
+                <div class="card-body-row">
+                    <div class="card-fit-details">
                         <div class="fit-info">
                             <strong>HULL:</strong>
                             <span class="placeholder">{{ fit.ship_name|default:"-" }}</span>
@@ -198,40 +198,41 @@ by the polling JavaScript.
                             <strong>ISSUES:</strong>
                             <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span>
                         </div>
+
+                        <div class="pilot-stats">
+                            <div class="stat-item">
+                                <strong>TOTAL HRS:</strong>
+                                <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <strong>HULL HRS:</strong>
+                                <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="fit-ship-right">
+
+                    <!-- NEW: Ship Image Container -->
+                    <div class="ship-image-container">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
-                             alt="{{ fit.ship_name|default:"Hull" }} hull"
-                             class="ship-hull-img">
+                             alt="{{ fit.ship_name }} hull">
                         {% endif %}
                     </div>
                 </div>
-
-                <div class="pilot-stats">
-                    <div class_="stat-item">
-                        <strong>TOTAL HRS:</strong>
-                        <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>HULL HRS:</strong>
-                        <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
-                    </div>
+                <!-- --- END NEW LAYOUT --- -->
+                <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-deny"
+                            data-fit-id="{{ fit.id }}"
+                            data-action="deny"
+                            title="Remove from Waitlist">
+                        &#x274C; <!-- Cross mark emoji -->
+                    </button>
                 </div>
+                {% endif %}
+                <!-- --- END NEW --- -->
             </div>
-            <!-- --- END MODIFIED --- -->
-            <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
-            {% if is_fc %}
-            <div class="fc-actions">
-                <button class="fc-btn btn-deny"
-                        data-fit-id="{{ fit.id }}"
-                        data-action="deny"
-                        title="Remove from Waitlist">
-                    &#x274C; <!-- Cross mark emoji -->
-                </button>
-            </div>
-            {% endif %}
-            <!-- --- END NEW --- -->
         </li>
         {% endfor %}
     </ul>
@@ -257,10 +258,10 @@ by the polling JavaScript.
                 <span class="wait-timer"></span>
             </div>
 
-            <!-- --- MODIFIED: Card Body Layout --- -->
             <div class="card-body">
-                <div class="card-body-grid">
-                    <div class="fit-details-left">
+                <!-- --- NEW LAYOUT: Text on left, Image on right --- -->
+                <div class="card-body-row">
+                    <div class="card-fit-details">
                         <div class="fit-info">
                             <strong>HULL:</strong>
                             <span class="placeholder">{{ fit.ship_name|default:"-" }}</span>
@@ -274,43 +275,126 @@ by the polling JavaScript.
                             <strong>ISSUES:</strong>
                             <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span>
                         </div>
+
+                        <div class="pilot-stats">
+                            <div class="stat-item">
+                                <strong>TOTAL HRS:</strong>
+                                <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <strong>HULL HRS:</strong>
+                                <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="fit-ship-right">
+
+                    <!-- NEW: Ship Image Container -->
+                    <div class="ship-image-container">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
-                             alt="{{ fit.ship_name|default:"Hull" }} hull"
-                             class="ship-hull-img">
+                             alt="{{ fit.ship_name }} hull">
                         {% endif %}
                     </div>
                 </div>
-
-                <div class="pilot-stats">
-                    <div class_="stat-item">
-                        <strong>TOTAL HRS:</strong>
-                        <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>HULL HRS:</strong>
-                        <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span>
-                    </div>
+                <!-- --- END NEW LAYOUT --- -->
+                <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-deny"
+                            data-fit-id="{{ fit.id }}"
+                            data-action="deny"
+                            title="Remove from Waitlist">
+                        &#x274C; <!-- Cross mark emoji -->
+                    </button>
                 </div>
+                {% endif %}
+                <!-- --- END NEW --- -->
             </div>
-            <!-- --- END MODIFIED --- -->
-            <!-- --- NEW: FC ACTION FOR APPROVED FITS --- -->
-            {% if is_fc %}
-            <div class="fc-actions">
-                <button class="fc-btn btn-deny"
-                        data-fit-id="{{ fit.id }}"
-                        data-action="deny"
-                        title="Remove from Waitlist">
-                    &#x274C; <!-- Cross mark emoji -->
-                </button>
-            </div>
-            {% endif %}
-            <!-- --- END NEW --- -->
         </li>
         {% endfor %}
     </ul>
 </div>
 
-<!-- You can add the MAR_DPS and MAR_SNIPER columns here following the same pattern -->
+<!-- --- NEW: MAR_DPS COLUMN --- -->
+<div class="waitlist-column">
+    <div class="column-header status-APPROVED">
+        <h2>MAR_DPS</h2>
+        <span class="column-count">{{ mar_dps_fits.count }}</span>
+    </div>
+    <ul class="fit-card-list">
+        {% for fit in mar_dps_fits %}
+        <li class="fit-card status-{{ fit.status }}" id="fit-card-{{ fit.id }}" data-submitted-time="{{ fit.submitted_at.isoformat }}">
+            <div class="card-header">
+                <img src="https://images.evetech.net/characters/{{ fit.character.character_id }}/portrait?size=64"
+                     alt="{{ fit.character.character_name }} portrait"
+                     class="pilot-portrait">
+                <span class="pilot-name">{{ fit.character.character_name }}</span>
+                <span class="wait-timer"></span>
+            </div>
+            <div class="card-body">
+                <div class="card-body-row">
+                    <div class="card-fit-details">
+                        <div class="fit-info"><strong>HULL:</strong> <span class="placeholder">{{ fit.ship_name|default:"-" }}</span></div>
+                        <div class="fit-info"><strong>TANK:</strong> <span class="placeholder">{{ fit.tank_type|default:"-" }}</span></div>
+                        <div class="fit-issues"><strong>ISSUES:</strong> <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span></div>
+                        <div class="pilot-stats">
+                            <div class="stat-item"><strong>TOTAL HRS:</strong> <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span></div>
+                            <div class="stat-item"><strong>HULL HRS:</strong> <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span></div>
+                        </div>
+                    </div>
+                    <div class="ship-image-container">
+                        {% if fit.ship_type_id %}<img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64" alt="{{ fit.ship_name }} hull">{% endif %}
+                    </div>
+                </div>
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-deny" data-fit-id="{{ fit.id }}" data-action="deny" title="Remove from Waitlist">&#x274C;</button>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- --- NEW: MAR_SNIPER COLUMN --- -->
+<div class="waitlist-column">
+    <div class="column-header status-APPROVED">
+        <h2>MAR_SNIPER</h2>
+        <span class="column-count">{{ mar_sniper_fits.count }}</span>
+    </div>
+    <ul class="fit-card-list">
+        {% for fit in mar_sniper_fits %}
+        <li class="fit-card status-{{ fit.status }}" id="fit-card-{{ fit.id }}" data-submitted-time="{{ fit.submitted_at.isoformat }}">
+            <div class="card-header">
+                <img src="https://images.evetech.net/characters/{{ fit.character.character_id }}/portrait?size=64"
+                     alt="{{ fit.character.character_name }} portrait"
+                     class="pilot-portrait">
+                <span class="pilot-name">{{ fit.character.character_name }}</span>
+                <span class="wait-timer"></span>
+            </div>
+            <div class="card-body">
+                <div class="card-body-row">
+                    <div class="card-fit-details">
+                        <div class="fit-info"><strong>HULL:</strong> <span class="placeholder">{{ fit.ship_name|default:"-" }}</span></div>
+                        <div class="fit-info"><strong>TANK:</strong> <span class="placeholder">{{ fit.tank_type|default:"-" }}</span></div>
+                        <div class="fit-issues"><strong>ISSUES:</strong> <span class="placeholder">{{ fit.fit_issues|default:"-" }}</span></div>
+                        <div class="pilot-stats">
+                            <div class="stat-item"><strong>TOTAL HRS:</strong> <span class="placeholder">{{ fit.total_fleet_hours|default:0 }}</span></div>
+                            <div class="stat-item"><strong>HULL HRS:</strong> <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span></div>
+                        </div>
+                    </div>
+                    <div class="ship-image-container">
+                        {% if fit.ship_type_id %}<img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64" alt="{{ fit.ship_name }} hull">{% endif %}
+                    </div>
+                </div>
+                {% if is_fc %}
+                <div class="fc-actions">
+                    <button class="fc-btn btn-deny" data-fit-id="{{ fit.id }}" data-action="deny" title="Remove from Waitlist">&#x274C;</button>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
