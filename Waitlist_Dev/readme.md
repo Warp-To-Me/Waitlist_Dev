@@ -1,24 +1,36 @@
-EVE Online Waitlist Utility
+# EVE Online Waitlist Utility
 This is a starter project for your EVE Online waitlist utility, built with Python and Django.
-It's designed to be modular, as you requested, and provides the foundation for all the features you described.
+It's designed to be modular, and provides the foundation for all the features an Incursion community might want.
 
-Project Structure
-Your project is organized into a main project folder (eve_waitlist) and several modular "apps":
+## Project Structure
+### This project is organized into a main project folder (eve_waitlist) and several modular "apps":
+
 /eve_waitlist/: This is the main Django project folder.
+
 settings.py: This is your most important configuration file. I have set it up to use MySQL and included placeholders for your ESI app credentials.
 urls.py: The main URL router for the entire project.
+
+
 /esi_auth/: A Django app to handle all ESI (OAuth) authentication.
+
 views.py: Contains the logic to redirect users to the EVE SSO login page and handle the callback to authenticate them and create their user accounts.
+
+
 /waitlist/: A Django app for the core waitlist functionality.
+
 models.py: Defines your database tables (models) for things like Waitlist, ShipFit, and EveCharacter.
 fit_parser.py: A stub file where you'll build your fit parsing and validation logic.
+
+
 /fleet_admin/: A Django app to configure the admin backend.
 admin.py: This file tells the Django admin site how to display your models. This is where you'll empower your Fleet Commanders (FCs) to approve/deny fits.
 manage.py: The main script you'll use to run your web server and manage the project.
+
+
 requirements.txt: A list of the Python packages you'll need.
 
-How to Get Started
-Create your ESI Application:
+## How to Get Started
+### Create your ESI Application:
 Go to the EVE Online Developers Portal.
 Create a new application.
 Set the "Callback URL" to http://127.0.0.1:8000/auth/callback/ for local development.
@@ -30,7 +42,7 @@ esi-fleets.write_fleet.v1
 publicData
 Once created, you'll get a Client ID and a Secret Key.
 
-Set up your Environment (in VS 2022):
+### Set up your Environment (in VS 2022):
 Open this project folder in Visual Studio 2022.
 Create a Python virtual environment: python -m venv venv
 Activate it: .\venv\Scripts\activate
@@ -40,21 +52,23 @@ Database: Fill in the DATABASES section with your MySQL credentials (the databas
 You'll need to create the database in HeidiSQL first.
 
 ESI: Fill in the ESI_SSO_CLIENT_ID and ESI_SSO_CLIENT_SECRET with the values from Step 1.
-Initialize Your Database:
+
+### Initialize Your Database:
 Run the initial database "migrations" to create all the Django admin and app tables in your MySQL database:
 python manage.py migrate
-Create a Superuser (Admin):
+
+### Create a Superuser (Admin):
 This creates the first "Admin" account for you to manage other users and permissions.
 python manage.py createsuperuser
 Follow the prompts to create a username and password.
-Run the Development Server:
+
+### Run the Development Server:
 Start the website!
 python manage.py runserver
 You can now access your site at http://127.0.0.1:8000/.Visit http://127.0.0.1:8000/admin/ to log in to the admin backend with the superuser you just created.
 Visit http://127.0.0.1:8000/auth/login/ to test the ESI login flow!
 
-Next Steps
-
+### Next Steps
 From here, you have the foundation to build all your features:
 Fit Parsing: Open waitlist/fit_parser.py. 
 This is where you'll use the eveparse library to parse the raw fit text from the ShipFit model and check it against rules.
