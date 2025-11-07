@@ -442,33 +442,75 @@ It will be filled by the partial template on page load.
                 }
                 return response.json();
             })
-            .then(fitItems => {
-                // 'fitItems' is the list of {raw_line, type_id, name, icon_url, ...}
+            .then(data => {
+                // --- MODIFICATION: Handle new JSON structure ---
+                // data = { problem_items: [], missing_items: [], doctrine_name: "..." }
 
-                // Set title (using first item, which is the ship)
-                if (fitItems.length > 0 && fitItems[0].name) {
-                    fitModalTitle.textContent = `Fit: ${fitItems[0].name}`;
+                fitModalTitle.textContent = `Fit vs. ${data.doctrine_name}`;
+
+                let html = '<div class="fit-modal-sub-container">';
+
+                // --- Build Problem Items List ---
+                html += '<div>';
+                html += '<h3 class="fit-modal-sub-header header-problem">Problem Items</h3>';
+                html += '<ul class="fit-modal-sub-list">';
+                if (data.problem_items.length > 0) {
+                    data.problem_items.forEach(item => {
+                        html += `<li class="fit-modal-sub-item" id="sub-item-${item.type_id}">`;
+                        if (item.icon_url) {
+                            html += `<img src="${item.icon_url}" alt="${item.name}">`;
+                        } else {
+                            html += '<div class="fit-modal-icon-placeholder"></div>';
+                        }
+                        html += `<span title="${item.raw_line}">${item.name} (x${item.quantity})</span>`;
+
+                        // Add "Make Sub" button only if there are missing items to map to
+                        if (data.missing_items.length > 0) {
+                            html += `<button class="btn-make-sub js-make-sub"
+                                        data-sub-item-id="${item.type_id}"
+                                        data-sub-item-name="${item.name}">
+                                        Make Sub
+                                    </button>`;
+                        }
+                        html += '</li>';
+                    });
                 } else {
-                    fitModalTitle.textContent = "Fit Details";
+                    html += '<li style="color: #999; font-style: italic;">None</li>';
                 }
+                html += '</ul></div>';
 
-                // Build the HTML
-                let html = '<ul class="fit-detail-list">';
-                fitItems.forEach(item => {
-                    html += '<li>';
-                    if (item.icon_url) {
-                        html += `<img src="${item.icon_url}" class="fit-modal-icon" alt="${item.name}">`;
-                    } else {
-                        // Add a placeholder to keep alignment
-                        html += '<div class="fit-modal-icon-placeholder"></div>';
-                    }
-                    // Add the raw line text
-                    html += `<span>${item.raw_line}</span>`;
-                    html += '</li>';
-                });
-                html += '</ul>';
+                // --- Build Missing Items List ---
+                html += '<div>';
+                html += '<h3 class="fit-modal-sub-header header-missing">Missing Items</h3>';
+                html += '<ul class="fit-modal-sub-list">';
+                if (data.missing_items.length > 0) {
+                    data.missing_items.forEach(item => {
+                        html += `<li class="fit-modal-sub-item">`;
+                        if (item.icon_url) {
+                            html += `<img src="${item.icon_url}" alt="${item.name}">`;
+                        } else {
+                            html += '<div class="fit-modal-icon-placeholder"></div>';
+                        }
+                        html += `<span>${item.name} (x${item.quantity})</span>`;
+                        html += '</li>';
+                    });
+                } else {
+                    html += '<li style="color: #999; font-style: italic;">None</li>';
+                }
+                html += '</ul></div>';
+
+                html += '</div>'; // Close .fit-modal-sub-container
 
                 fitModalBody.innerHTML = html;
+
+                // --- Add event listeners for the new buttons ---
+                // We must do this *after* setting innerHTML
+                fitModalBody.querySelectorAll('.js-make-sub').forEach(button => {
+                    button.addEventListener('click', () => {
+                        showSubstitutionDropdown(button, data.missing_items);
+                    });
+                });
+
             })
             .catch(error => {
                 fitModalBody.innerHTML = `<p style="color: #ff8a8a; padding: 20px;">Error: ${error.message}</p>`;
@@ -481,7 +523,85 @@ It will be filled by the partial template on page load.
         }
     }
 
-    // Add close listeners
+    // --- NEW: Function to show the "Make Sub" dropdown ---
+    function showSubstitutionDropdown(button, missingItems) {
+        // Get data from the clicked button
+        const substituteItemId = button.dataset.subItemId;
+        const substituteItemName = button.dataset.subItemName;
+
+        // Find the parent list item
+        const listItem = button.closest('.fit-modal-sub-item');
+        if (!listItem) return;
+
+        // Disable the button to prevent double clicks
+        button.disabled = true;
+
+        // Create the dropdown
+        const select = document.createElement('select');
+        select.className = 'sub-dropdown-select';
+
+        // Add a placeholder option
+        select.innerHTML = `<option value="">Substitute for...</option>`;
+
+        // Add all missing items as options
+        missingItems.forEach(item => {
+            select.innerHTML += `<option value="${item.type_id}">${item.name} (x${item.quantity})</option>`;
+        });
+
+        // Add an event listener to the dropdown
+        select.addEventListener('change', () => {
+            const baseItemId = select.value;
+            if (!baseItemId) return;
+
+            // Get the name of the selected base item
+            const baseItemName = select.options[select.selectedIndex].text;
+
+            // Show a simple confirm dialog
+            if (!confirm(`Add "${substituteItemName}" as a substitute for "${baseItemName}"?`)) {
+                // User cancelled
+                select.remove(); // Remove the dropdown
+                button.disabled = false; // Re-enable button
+                return;
+            }
+
+            // User confirmed, send the API request
+            const formData = new FormData();
+            formData.append('base_item_id', baseItemId);
+            formData.append('substitute_item_id', substituteItemId);
+
+            fetch("{% url 'waitlist:api_add_substitution' %}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(data.message); // Show success
+                    // Remove the dropdown
+                    select.remove();
+                    // Keep the button disabled, or maybe change its text
+                    button.textContent = "Added!";
+                } else {
+                    throw new Error(data.message);
+                }
+            })
+            .catch(error => {
+                alert(`Error: ${error.message}`);
+                select.remove(); // Remove dropdown
+                button.disabled = false; // Re-enable button on error
+            });
+        });
+
+        // Add the dropdown to the list item
+        listItem.appendChild(select);
+    }
+
+
+    // Add close listeners for the modal
     if (fitModalOverlay) {
         fitModalCloseBtn.addEventListener('click', closeFitModal);
         fitModalCancelBtn.addEventListener('click', closeFitModal);

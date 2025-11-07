@@ -481,6 +481,8 @@ def api_get_waitlist_html(request):
 def api_get_fit_details(request):
     """
     Returns the parsed fit JSON for the FC's inspection modal.
+    
+    --- MODIFIED TO DO COMPARISON ---
     """
     if not is_fleet_commander(request.user):
         return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
@@ -492,19 +494,137 @@ def api_get_fit_details(request):
     try:
         fit = get_object_or_404(ShipFit, id=fit_id)
         
-        # Check if the user is an FC for the waitlist this fit is on
-        # (This is a good extra check, but we already check for global FC)
+        # 1. Get the pilot's submitted fit list and summary
+        try:
+            full_fit_list = json.loads(fit.parsed_fit_json) if fit.parsed_fit_json else []
+        except json.JSONDecodeError:
+            full_fit_list = [] # Handle corrupted JSON
+            
+        submitted_items_to_check = Counter(fit.get_parsed_fit_summary())
         
-        if not fit.parsed_fit_json:
-            # Fallback: just return the raw fit if no JSON exists
-            return JsonResponse([{"raw_line": line} for line in fit.raw_fit.splitlines()])
+        # 2. Get the best matching doctrine
+        doctrine = DoctrineFit.objects.filter(ship_type__type_id=fit.ship_type_id).first()
+        
+        if not doctrine:
+            # No doctrine found, just return the fit as-is (all items are 'problem_items')
+            return JsonResponse({
+                "problem_items": full_fit_list,
+                "missing_items": [],
+                "doctrine_name": "No Doctrine Found"
+            }, safe=False)
 
-        # Load the JSON from the text field and return it
-        parsed_fit_data = json.loads(fit.parsed_fit_json)
-        return JsonResponse(parsed_fit_data, safe=False) # safe=False because it's a list
+        # 3. Get doctrine items and substitution map
+        doctrine_items_to_fill = Counter(doctrine.get_fit_items())
+        sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
+        sub_map = {}
+        for group in sub_groups:
+            allowed_ids = {str(sub.type_id) for sub in group.substitutes.all()}
+            allowed_ids.add(str(group.base_item_id))
+            sub_map[str(group.base_item_id)] = allowed_ids
+
+        # 4. Perform the comparison
+        
+        # --- Pass 1: Consume exact matches ---
+        exact_matches = (submitted_items_to_check & doctrine_items_to_fill)
+        submitted_items_to_check.subtract(exact_matches)
+        doctrine_items_to_fill.subtract(exact_matches)
+        
+        # --- Pass 2: Consume known substitutes ---
+        # We must iterate over a copy, as we are modifying the dict
+        for base_id_str, needed_qty in list(doctrine_items_to_fill.items()):
+            if needed_qty == 0:
+                continue
+            
+            # Get allowed subs (excluding the base item itself, which we did in pass 1)
+            allowed_sub_ids = sub_map.get(base_id_str, set()) - {base_id_str}
+            
+            for sub_id_str in allowed_sub_ids:
+                if sub_id_str in submitted_items_to_check:
+                    # How many of this sub can we use?
+                    can_sub_qty = min(needed_qty, submitted_items_to_check[sub_id_str])
+                    
+                    submitted_items_to_check[sub_id_str] -= can_sub_qty
+                    doctrine_items_to_fill[base_id_str] -= can_sub_qty
+                    needed_qty -= can_sub_qty # Update needed_qty for this loop
+                    
+                    if needed_qty == 0:
+                        break # This doctrine slot is filled
+            
+        # 5. Get final lists of problem/missing IDs
+        # Remove hull from check (it's always a 'match')
+        hull_id_str = str(fit.ship_type_id)
+        if hull_id_str in submitted_items_to_check:
+            del submitted_items_to_check[hull_id_str]
+        if hull_id_str in doctrine_items_to_fill:
+            del doctrine_items_to_fill[hull_id_str]
+
+        problem_item_ids = {k for k, v in submitted_items_to_check.items() if v > 0}
+        missing_item_ids = {k for k, v in doctrine_items_to_fill.items() if v > 0}
+        
+        # 6. Enrich the lists
+        
+        # Find all problem items from the *original* parsed list
+        problem_items = [
+            item for item in full_fit_list 
+            if str(item.get('type_id')) in problem_item_ids
+        ]
+        
+        # Get EveType info for missing items
+        missing_items_data = EveType.objects.filter(type_id__in=[int(i) for i in missing_item_ids])
+        missing_items = [{
+            "type_id": t.type_id, 
+            "name": t.name, 
+            "icon_url": t.icon_url, 
+            "quantity": doctrine_items_to_fill[str(t.type_id)] # Show how many are missing
+        } for t in missing_items_data]
+
+        return JsonResponse({
+            "problem_items": problem_items,
+            "missing_items": missing_items,
+            "doctrine_name": doctrine.name
+        }, safe=False)
 
     except Http404:
         return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+# --- END MODIFICATION ---
+
+
+# --- NEW API VIEW: Add Substitution ---
+@login_required
+@require_POST
+@user_passes_test(is_fleet_commander)
+def api_add_substitution(request):
+    """
+    Handles an FC's request to add a new substitution.
+    """
+    base_item_id = request.POST.get('base_item_id')
+    substitute_item_id = request.POST.get('substitute_item_id')
+    
+    if not base_item_id or not substitute_item_id:
+        return JsonResponse({"status": "error", "message": "Missing item IDs."}, status=400)
+        
+    try:
+        base_item = EveType.objects.get(type_id=base_item_id)
+        sub_item = EveType.objects.get(type_id=substitute_item_id)
+        
+        # Find or create the substitution group for this base item
+        group, created = FitSubstitutionGroup.objects.get_or_create(
+            base_item=base_item,
+            defaults={'name': f"Substitutes for {base_item.name}"}
+        )
+        
+        # Add the new item to the group
+        group.substitutes.add(sub_item)
+        
+        return JsonResponse({
+            "status": "success",
+            "message": f"Added '{sub_item.name}' as a substitute for '{base_item.name}'."
+        })
+
+    except EveType.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Item not found in database."}, status=404)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 # --- END NEW VIEW ---

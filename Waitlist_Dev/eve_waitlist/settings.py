@@ -175,7 +175,7 @@ ESI_SSO_CLIENT_ID = os.environ.get('ESI_SSO_CLIENT_ID')
 ESI_SSO_CLIENT_SECRET = os.environ.get('ESI_SSO_CLIENT_SECRET')
 
 # This MUST point to our /auth/callback/ path
-ESI_SSO_CALLBACK_URL = 'http://180.181.208.178:8000/auth/callback/'
+ESI_SSO_CALLBACK_URL = 'http://127.0.0.1:8000/auth/callback/'
 
 LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
 LOGOUT_REDIRECT_URL = '/'
