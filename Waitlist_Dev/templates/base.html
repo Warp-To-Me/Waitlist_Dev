@@ -228,6 +228,12 @@
             max-height: 90vh;
         }
 
+        /* --- NEW: Fit Detail Modal Width --- */
+        /* Make the fit detail modal narrower */
+        #fit-detail-modal-overlay .modal-content {
+            max-width: 500px;
+        }
+
         .modal-header {
             padding: 15px 20px;
             border-bottom: 1px solid #444;
@@ -263,8 +269,14 @@
             overflow-y: auto; /* Allow modal body to scroll */
         }
 
+        /* --- NEW: Fit Detail Modal Body --- */
+        #fit-detail-modal-body {
+            display: block; /* Override grid */
+            padding: 0; /* Remove padding */
+        }
+
         @media (min-width: 768px) {
-            .modal-body {
+            #xup-modal-overlay .modal-body {
                 grid-template-columns: 2fr 1fr; /* Fit text vs implant list */
             }
         }
@@ -313,7 +325,8 @@
                 padding-bottom: 10px;
             }
         /* Spinner for implant loading */
-        .implant-spinner {
+        .implant-spinner,
+        .modal-spinner { /* --- ADDED: Generic spinner --- */
             width: 30px;
             height: 30px;
             border: 4px solid #555;
@@ -321,6 +334,10 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 20px auto;
+        }
+
+        #fit-detail-modal-body .modal-spinner {
+            margin: 40px auto; /* More margin */
         }
 
         @keyframes spin {
@@ -377,6 +394,51 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* --- NEW: Fit Detail List (FC Modal) --- */
+        .fit-detail-list {
+            list-style: none;
+            padding: 10px; /* MODIFIED: Was 15px */
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85em; /* MODIFIED: Was 0.9em */
+        }
+
+            .fit-detail-list li {
+                display: flex;
+                align-items: center;
+                gap: 5px; /* MODIFIED: Was 8px */
+                padding: 2px 5px; /* MODIFIED: Was 3px 6px */
+                border-radius: 4px;
+                white-space: pre; /* Keep whitespace */
+            }
+
+                .fit-detail-list li:nth-child(even) {
+                    background: #333;
+                }
+
+                .fit-detail-list li:first-child {
+                    font-weight: bold;
+                    color: #fff;
+                    background: #3a3a3a;
+                }
+
+        .fit-modal-icon {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .fit-modal-icon-placeholder {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        /* --- END NEW FIT DETAIL LIST --- */
+
 
         .modal-footer {
             padding: 15px 20px;
@@ -507,7 +569,7 @@
                 <button class="modal-close-btn" id="xup-modal-close-btn">&times;</button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body" id="xup-modal-body">
                 <!-- Fit Form -->
                 <div class="form-group">
                     <label for="xup-char-select">Character</label>
@@ -542,6 +604,29 @@
     </div>
     {% endif %}
     <!-- --- END NEW MODAL --- -->
+    <!-- --- NEW: FC FIT DETAIL MODAL --- -->
+    {% if is_fc %}
+    <div class="modal-overlay" id="fit-detail-modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="fit-detail-modal-title">Fit Details</h2>
+                <button class="modal-close-btn" id="fit-detail-modal-close-btn">&times;</button>
+            </div>
+
+            <!-- Body is populated by JS -->
+            <div class="modal-body" id="fit-detail-modal-body">
+                <div class="modal-spinner"></div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-actions">
+                    <button class="header-btn add-alt-btn" id="fit-detail-modal-cancel-btn">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <!-- --- END NEW FC MODAL --- -->
     <!-- --- SHARED JAVASCRIPT --- -->
     <script>
         const dropdownToggleButton = document.getElementById('dropdown-toggle-button');
@@ -731,7 +816,11 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
+                        // --- THIS IS THE FIX ---
+                        // We no longer alert(data.message) on success
                         closeModal();
+                        // --- END FIX ---
+
                         // The live polling will automatically pick up the new fit!
                         // We can also reset the form
                         fitTextarea.value = "";

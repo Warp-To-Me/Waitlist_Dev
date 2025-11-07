@@ -1,9 +1,10 @@
 from django.db import models
-from waitlist.models import EveCharacter
+# --- REMOVED: from waitlist.models import EveCharacter ---
 import json
 
 # --- NEW MODEL: EveGroup ---
 # This will store our "Skill Categories" (e.g., Gunnery, Spaceship Command)
+# and also item groups (e.g., Projectile Ammo, Battleship)
 class EveGroup(models.Model):
     group_id = models.IntegerField(primary_key=True, unique=True)
     name = models.CharField(max_length=255)
@@ -13,6 +14,7 @@ class EveGroup(models.Model):
 
 # --- NEW MODEL: EveType ---
 # This will store our "Skill Types" (e.g., Small Autocannon)
+# and also item types (e.g., Vargur, 1400mm Howitzer II)
 class EveType(models.Model):
     type_id = models.IntegerField(primary_key=True, unique=True)
     name = models.CharField(max_length=255)
@@ -20,6 +22,9 @@ class EveType(models.Model):
     
     # --- ADDED THIS FIELD ---
     slot = models.IntegerField(null=True, blank=True, help_text="Implant slot (if applicable)")
+    
+    # --- NEW: Added icon_url field ---
+    icon_url = models.CharField(max_length=255, null=True, blank=True, help_text="URL for the item's icon")
     # --- END ADDITION ---
 
     def __str__(self):
@@ -34,7 +39,7 @@ class PilotSnapshot(models.Model):
     We can just fetch the JSON blob from ESI and store it.
     """
     character = models.OneToOneField(
-        EveCharacter,
+        'waitlist.EveCharacter', # --- MODIFIED: Use string notation ---
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="pilot_snapshot"

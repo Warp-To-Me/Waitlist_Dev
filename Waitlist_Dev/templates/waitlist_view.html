@@ -157,11 +157,21 @@
 
     .ship-image-container {
         flex-shrink: 0; /* Don't shrink */
+        /* --- NEW: Add cursor for clickable --- */
+        cursor: pointer;
+        border-radius: 5px;
+        padding: 4px;
+        transition: background-color 0.2s;
     }
+
+        .ship-image-container:hover {
+            background-color: #444;
+        }
 
         .ship-image-container img {
             width: 64px;
             height: 64px;
+            display: block; /* Remove bottom space */
         }
     /* --- END NEW --- */
 
@@ -307,6 +317,9 @@ It will be filled by the partial template on page load.
     // --- CSRF Token for all API requests ---
     const csrfToken = "{{ csrf_token }}";
 
+    // --- Check if user is an FC ---
+    const isFC = {{ is_fc|yesno:"true,false" }};
+
     // --- 1. FC ACTION HANDLER ---
 
     function handleFCAction(event) {
@@ -404,10 +417,103 @@ It will be filled by the partial template on page load.
             });
     }
 
+    // --- 3. NEW: FIT DETAIL MODAL HANDLER ---
+
+    // Get modal elements (they are in base.html)
+    const fitModalOverlay = document.getElementById('fit-detail-modal-overlay');
+    const fitModalCloseBtn = document.getElementById('fit-detail-modal-close-btn');
+    const fitModalCancelBtn = document.getElementById('fit-detail-modal-cancel-btn');
+    const fitModalBody = document.getElementById('fit-detail-modal-body');
+    const fitModalTitle = document.getElementById('fit-detail-modal-title');
+
+    function openFitModal(fitId) {
+        if (!fitModalOverlay) return;
+
+        // Show modal with spinner
+        fitModalBody.innerHTML = '<div class="modal-spinner"></div>';
+        fitModalTitle.textContent = "Loading Fit...";
+        fitModalOverlay.classList.add('show');
+
+        // Fetch fit details
+        fetch(`{% url 'waitlist:api_get_fit_details' %}?fit_id=${fitId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load fit details.');
+                }
+                return response.json();
+            })
+            .then(fitItems => {
+                // 'fitItems' is the list of {raw_line, type_id, name, icon_url, ...}
+
+                // Set title (using first item, which is the ship)
+                if (fitItems.length > 0 && fitItems[0].name) {
+                    fitModalTitle.textContent = `Fit: ${fitItems[0].name}`;
+                } else {
+                    fitModalTitle.textContent = "Fit Details";
+                }
+
+                // Build the HTML
+                let html = '<ul class="fit-detail-list">';
+                fitItems.forEach(item => {
+                    html += '<li>';
+                    if (item.icon_url) {
+                        html += `<img src="${item.icon_url}" class="fit-modal-icon" alt="${item.name}">`;
+                    } else {
+                        // Add a placeholder to keep alignment
+                        html += '<div class="fit-modal-icon-placeholder"></div>';
+                    }
+                    // Add the raw line text
+                    html += `<span>${item.raw_line}</span>`;
+                    html += '</li>';
+                });
+                html += '</ul>';
+
+                fitModalBody.innerHTML = html;
+            })
+            .catch(error => {
+                fitModalBody.innerHTML = `<p style="color: #ff8a8a; padding: 20px;">Error: ${error.message}</p>`;
+            });
+    }
+
+    function closeFitModal() {
+        if (fitModalOverlay) {
+            fitModalOverlay.classList.remove('show');
+        }
+    }
+
+    // Add close listeners
+    if (fitModalOverlay) {
+        fitModalCloseBtn.addEventListener('click', closeFitModal);
+        fitModalCancelBtn.addEventListener('click', closeFitModal);
+        fitModalOverlay.addEventListener('click', (e) => {
+            if (e.target === fitModalOverlay) {
+                closeFitModal();
+            }
+        });
+    }
+
+
     // This function sets up all our event listeners
     function initializeWaitlist() {
-        // Attach FC Action listener
-        waitlistContainer.addEventListener('click', handleFCAction);
+
+        // --- 4. MODIFIED: Add event delegation ---
+        waitlistContainer.addEventListener('click', (event) => {
+            // Check for FC action click
+            const fcButton = event.target.closest('.fc-btn');
+            if (isFC && fcButton) {
+                handleFCAction(event);
+                return; // Stop processing
+            }
+
+            // Check for Fit Modal click
+            const fitModalButton = event.target.closest('.js-open-fit-modal');
+            if (isFC && fitModalButton) {
+                const fitId = fitModalButton.dataset.fitId;
+                openFitModal(fitId);
+                return; // Stop processing
+            }
+        });
+        // --- END MODIFICATION ---
 
         // Run timers
         updateWaitTimers(); // Run once on load
@@ -419,7 +525,7 @@ It will be filled by the partial template on page load.
         pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
     }
 
-    // --- 3. PAGE INITIALIZATION ---
+    // --- 5. PAGE INITIALIZATION ---
 
     document.addEventListener('DOMContentLoaded', () => {
         // Enable the X-Up button (it's disabled by default in base.html)

@@ -53,8 +53,13 @@ by the polling JavaScript.
                         </div>
                     </div>
 
-                    <!-- NEW: Ship Image Container -->
-                    <div class="ship-image-container">
+                    <!--
+                    --- MODIFIED: Ship Image Container ---
+                    Added data-fit-id and js-open-fit-modal
+                    -->
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
                              alt="{{ fit.ship_name }} hull">
@@ -134,8 +139,13 @@ by the polling JavaScript.
                         </div>
                     </div>
 
-                    <!-- NEW: Ship Image Container -->
-                    <div class="ship-image-container">
+                    <!--
+                    --- MODIFIED: Ship Image Container ---
+                    Added data-fit-id and js-open-fit-modal
+                    -->
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
                              alt="{{ fit.ship_name }} hull">
@@ -211,8 +221,13 @@ by the polling JavaScript.
                         </div>
                     </div>
 
-                    <!-- NEW: Ship Image Container -->
-                    <div class="ship-image-container">
+                    <!--
+                    --- MODIFIED: Ship Image Container ---
+                    Added data-fit-id and js-open-fit-modal
+                    -->
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
                              alt="{{ fit.ship_name }} hull">
@@ -288,8 +303,13 @@ by the polling JavaScript.
                         </div>
                     </div>
 
-                    <!-- NEW: Ship Image Container -->
-                    <div class="ship-image-container">
+                    <!--
+                    --- MODIFIED: Ship Image Container ---
+                    Added data-fit-id and js-open-fit-modal
+                    -->
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}
                         <img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64"
                              alt="{{ fit.ship_name }} hull">
@@ -342,7 +362,9 @@ by the polling JavaScript.
                             <div class="stat-item"><strong>HULL HRS:</strong> <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span></div>
                         </div>
                     </div>
-                    <div class="ship-image-container">
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}<img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64" alt="{{ fit.ship_name }} hull">{% endif %}
                     </div>
                 </div>
@@ -384,7 +406,9 @@ by the polling JavaScript.
                             <div class="stat-item"><strong>HULL HRS:</strong> <span class="placeholder">{{ fit.hull_fleet_hours|default:0 }}</span></div>
                         </div>
                     </div>
-                    <div class="ship-image-container">
+                    <div class="ship-image-container js-open-fit-modal"
+                         data-fit-id="{{ fit.id }}"
+                         title="Click to view fit">
                         {% if fit.ship_type_id %}<img src="https://images.evetech.net/types/{{ fit.ship_type_id }}/render?size=64" alt="{{ fit.ship_name }} hull">{% endif %}
                     </div>
                 </div>

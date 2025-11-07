@@ -1,5 +1,8 @@
 from django.db import models
 from django.conf import settings
+# --- MODIFIED: Import EveType for the new model ---
+from pilot.models import EveType
+import json # Import json for our new fields
 
 # Create your models here.
 
@@ -122,6 +125,14 @@ class ShipFit(models.Model):
     # The raw fit string (EFT format or similar) pasted by the user
     raw_fit = models.TextField(help_text="The ship fit in EFT (or similar) format.")
     
+    # --- NEW: Store the fully parsed fit as JSON ---
+    parsed_fit_json = models.TextField(
+        null=True, 
+        blank=True, 
+        help_text="JSON representation of the parsed fit, including item IDs and icon URLs"
+    )
+    # --- END NEW ---
+
     # Status of the fit in the waitlist
     status = models.CharField(
         max_length=10,
@@ -160,3 +171,101 @@ class ShipFit(models.Model):
 
     def __str__(self):
         return f"{self.character.character_name} - {self.ship_name} ({self.status})"
+
+    def get_parsed_fit_summary(self):
+        """
+        Helper method to get the parsed fit as a Python dict
+        for auto-approval checking.
+        """
+        if not self.parsed_fit_json:
+            return {}
+        try:
+            parsed_list = json.loads(self.parsed_fit_json)
+            # Convert list of dicts to a dict of {type_id: quantity}
+            fit_summary = {}
+            for item in parsed_list:
+                if item.get('type_id'):
+                    type_id = str(item['type_id']) # Use string keys for JSON consistency
+                    quantity = item.get('quantity', 1)
+                    fit_summary[type_id] = fit_summary.get(type_id, 0) + quantity
+            return fit_summary
+        except json.JSONDecodeError:
+            return {}
+
+
+# --- NEW MODEL: DoctrineFit ---
+class DoctrineFit(models.Model):
+    """
+    Stores an approved doctrine fit for auto-approval.
+    """
+    name = models.CharField(max_length=255, unique=True, help_text="e.g., 'Standard Vargur', 'Logi Basilisk'")
+    
+    # Link to the ship hull type in our mini-SDE
+    ship_type = models.ForeignKey(
+        'pilot.EveType', # --- MODIFIED: Use string notation ---
+        on_delete=models.CASCADE,
+        related_name="doctrine_fits",
+        null=True, blank=True # --- MODIFIED: Make optional for form ---
+    )
+    
+    # The category this fit belongs to (for auto-sorting)
+    category = models.CharField(
+        max_length=20,
+        choices=ShipFit.FitCategory.choices,
+        default=ShipFit.FitCategory.NONE,
+        db_index=True
+    )
+    
+    # The actual items and quantities, stored as JSON
+    # Example: {"31718": 1, "2048": 8, "2605": 8, ...}
+    # (Keys are type_ids as strings, values are quantities)
+    fit_items_json = models.TextField(
+        help_text="JSON dictionary of {type_id: quantity} for all required items",
+        blank=True # --- MODIFIED: Make optional for form ---
+    )
+
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+        
+    def get_fit_items(self):
+        """Helper to get the fit items as a Python dict."""
+        if not self.fit_items_json:
+            return {}
+        try:
+            return json.loads(self.fit_items_json)
+        except json.JSONDecodeError:
+            return {}
+# --- END NEW MODEL ---
+
+
+# --- NEW MODEL: FitSubstitutionGroup ---
+class FitSubstitutionGroup(models.Model):
+    """
+    Defines a group of 'equal or better' items for a base item.
+    e.g., Base = T2 LSE, Substitutes = Faction, Deadspace LSEs
+    """
+    name = models.CharField(
+        max_length=255, 
+        unique=True, 
+        help_text="e.g., 'T2 Large Shield Extenders', 'T2 Large Cap Batteries'"
+    )
+    
+    base_item = models.ForeignKey(
+        'pilot.EveType',
+        on_delete=models.CASCADE,
+        related_name='substitution_base',
+        help_text="The base item specified in a doctrine (e.g., Large Shield Extender II)"
+    )
+    
+    substitutes = models.ManyToManyField(
+        'pilot.EveType',
+        related_name='allowed_as_substitute',
+        blank=True,
+        help_text="All other items that are considered 'equal or better' (e.g., Caldari Navy LSE)"
+    )
+
+    def __str__(self):
+        return self.name
+# --- END NEW MODEL ---

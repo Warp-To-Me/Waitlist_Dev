@@ -1,14 +1,21 @@
 from django.shortcuts import render, redirect, get_object_or_404, resolve_url
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_POST
-from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse, Http404
 from django.contrib import messages
-from .models import EveCharacter, ShipFit, Fleet, FleetWaitlist
+# --- MODIFIED: Import new model ---
+from .models import EveCharacter, ShipFit, Fleet, FleetWaitlist, DoctrineFit, FitSubstitutionGroup
+# --- END MODIFIED ---
 # --- MODIFIED: Import EveGroup as well ---
 from pilot.models import EveType, EveGroup
+# --- NEW: Import from our new fit_parser.py ---
+from .fit_parser import get_or_cache_eve_type, get_or_cache_eve_group
+# --- END NEW ---
 from django.utils import timezone # Import timezone
 import random
-import re # --- NEW: Import regex for header parsing ---
+import re # --- NEW: Import regex for header and item parsing ---
+import json # --- NEW: Import json for serializing parsed fits ---
+from collections import Counter # --- NEW: Import Counter for fit comparison ---
 
 # --- NEW IMPORTS ---
 import requests
@@ -68,92 +75,104 @@ def get_refreshed_token_for_character(user, character):
 
 
 # --- NEW: SDE CACHING HELPER FUNCTIONS ---
-def get_or_cache_eve_group(group_id):
-    """
-    Tries to get an EveGroup from the local DB.
-    If not found, fetches from ESI and caches it.
-    """
-    try:
-        # Try to get from local DB
-        return EveGroup.objects.get(group_id=group_id)
-    except EveGroup.DoesNotExist:
-        try:
-            # Not found, so fetch from ESI
-            esi = EsiClientProvider()
-            group_data = esi.client.Universe.get_universe_groups_group_id(
-                group_id=group_id
-            ).results()
-            
-            # Create and save the new group
-            new_group = EveGroup.objects.create(
-                group_id=group_id,
-                name=group_data['name']
-            )
-            return new_group
-        except Exception:
-            # ESI call failed or data was bad
-            return None
-
-def get_or_cache_eve_type(ship_name):
-    """
-    Tries to get an EveType (ship) from the local DB by name.
-    If not found, searches ESI, fetches details, and caches it.
-    """
-    try:
-        # Try to get from local DB (case-insensitive)
-        return EveType.objects.get(name__iexact=ship_name)
-    except EveType.DoesNotExist:
-        try:
-            esi = EsiClientProvider()
-            
-            # 1. --- THIS IS THE FIX ---
-            #    Use the /universe/ids/ endpoint to convert name to ID
-            id_results = esi.client.Universe.post_universe_ids(
-                names=[ship_name] # Send a list with just our ship name
-            ).results()
-            
-            # 2. Check the results
-            if 'inventory_types' not in id_results or not id_results['inventory_types']:
-                # ESI couldn't find it
-                return None
-            
-            # 3. Get the type_id
-            type_id = id_results['inventory_types'][0]['id']
-            # --- END FIX ---
-            
-            # 4. Get the type's details
-            type_data = esi.client.Universe.get_universe_types_type_id(
-                type_id=type_id
-            ).results()
-            
-            # 5. Get or cache its group
-            group_id = type_data['group_id']
-            group = get_or_cache_eve_group(group_id)
-            if not group:
-                # Failed to get group info, can't save type
-                return None
-                
-            # 6. Get slot (if any)
-            slot = None
-            if 'dogma_attributes' in type_data:
-                for attr in type_data['dogma_attributes']:
-                    if attr['attribute_id'] == 300: 
-                        slot = int(attr['value'])
-                        break
-            
-            # 7. Create and save the new type
-            new_type = EveType.objects.create(
-                type_id=type_id,
-                name=type_data['name'],
-                group=group,
-                slot=slot
-            )
-            return new_type
-            
-        except Exception:
-            # ESI search or type call failed
-            return None
+#
+# --- REMOVED get_or_cache_eve_group and get_or_cache_eve_type ---
+# --- They are now imported from waitlist.fit_parser ---
+#
 # --- END SDE CACHING HELPERS ---
+
+# --- NEW: AUTO-APPROVAL HELPER ---
+def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
+    """
+    Compares a submitted fit summary against all matching doctrines.
+    
+    --- MODIFIED: Now uses FitSubstitutionGroup ---
+    """
+    if not ship_type_id:
+        return None, 'PENDING', ShipFit.FitCategory.NONE
+
+    # --- 1. Build the substitution map ---
+    # This map will look like:
+    # { 'base_item_id_str': {'base_item_id_str', 'sub_1_id_str', 'sub_2_id_str'}, ... }
+    sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
+    sub_map = {}
+    for group in sub_groups:
+        allowed_ids = {str(sub.type_id) for sub in group.substitutes.all()}
+        allowed_ids.add(str(group.base_item_id)) # The base item is always allowed
+        
+        # Map the base item ID to this set of allowed IDs
+        sub_map[str(group.base_item_id)] = allowed_ids
+
+
+    # --- 2. Get doctrines and submitted fit ---
+    matching_doctrines = DoctrineFit.objects.filter(ship_type__type_id=ship_type_id)
+    
+    if not matching_doctrines.exists():
+        return None, 'PENDING', ShipFit.FitCategory.NONE # No doctrines for this hull
+
+    # Make a Counter of the submitted fit (with string keys)
+    submitted_items_to_use = Counter({str(k): v for k, v in submitted_fit_summary.items()})
+
+    # --- 3. Loop through each doctrine and check for a match ---
+    for doctrine in matching_doctrines:
+        # Get the doctrine's "shopping list"
+        doctrine_items_to_match = Counter(doctrine.get_fit_items())
+        
+        # Make a *copy* of the submitted fit to "use up" items
+        submitted_items_snapshot = submitted_items_to_use.copy()
+        
+        fit_matches_doctrine = True
+
+        # --- 4. Check every item in the doctrine's shopping list ---
+        for doctrine_type_id, required_quantity in doctrine_items_to_match.items():
+            
+            # Get the set of allowed IDs for this doctrine "slot"
+            # Use sub_map.get() to provide a default (just the item itself)
+            allowed_ids_for_slot = sub_map.get(doctrine_type_id, {doctrine_type_id})
+            
+            found_quantity = 0
+            for allowed_id in allowed_ids_for_slot:
+                if allowed_id in submitted_items_snapshot:
+                    # Get how many of this allowed item the user has
+                    qty = submitted_items_snapshot[allowed_id]
+                    
+                    # Add to our found quantity
+                    found_quantity += qty
+                    
+                    # "Use up" these items so they can't match another slot
+                    del submitted_items_snapshot[allowed_id]
+            
+            # Did we find enough items (including substitutes) for this slot?
+            if found_quantity < required_quantity:
+                fit_matches_doctrine = False
+                break # This doctrine fails, stop checking its items
+
+        if not fit_matches_doctrine:
+            continue # This doctrine failed, try the next one
+
+        # --- 5. Check for extra, un-used items ---
+        # We matched all required items. Now, check for extras.
+        # Remove the hull, which is *expected* to be in both.
+        if str(ship_type_id) in submitted_items_snapshot:
+            # Check if they fit *more* hulls than required
+            if submitted_items_snapshot[str(ship_type_id)] > doctrine_items_to_match[str(ship_type_id)]:
+                 fit_matches_doctrine = False # e.g., fit 2 Vargurs?
+            del submitted_items_snapshot[str(ship_type_id)]
+        
+        # Check if any items are "left over"
+        if len(submitted_items_snapshot) > 0:
+            # User has extra modules not specified in the doctrine.
+            fit_matches_doctrine = False
+            continue # This doctrine fails, try the next one
+
+        # --- 6. Perfect Match! ---
+        # If we get here, fit_matches_doctrine is True AND there are no extra items.
+        # This is a perfect match (with substitutions).
+        return doctrine, 'APPROVED', doctrine.category
+
+    # Looped through all doctrines, no perfect match found.
+    return None, 'PENDING', ShipFit.FitCategory.NONE
+# --- END AUTO-APPROVAL HELPER ---
 
 
 # Create your views here.
@@ -212,6 +231,8 @@ def home(request):
 def api_submit_fit(request):
     """
     Handles the fit submission from the X-Up modal.
+    
+    --- HEAVILY MODIFIED TO PARSE ALL ITEMS ---
     """
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
 
@@ -235,19 +256,16 @@ def api_submit_fit(request):
         return JsonResponse({"status": "error", "message": "Fit cannot be empty."}, status=400)
     
     # ---
-    # --- MODIFIED CUSTOM PARSING LOGIC ---
+    # --- NEW FULL-FIT PARSING LOGIC ---
     # ---
     try:
-        # 1. Minimal sanitization: Replace non-breaking spaces
+        # 1. Minimal sanitization
         raw_fit_no_nbsp = raw_fit_original.replace(u'\xa0', u' ')
-        
-        # 2. Find the first non-empty line
         lines = [line.strip() for line in raw_fit_no_nbsp.splitlines() if line.strip()]
         if not lines:
             return JsonResponse({"status": "error", "message": "Fit is empty or contains only whitespace."}, status=400)
 
-        # 3. Manually parse the header (first line)
-        #    Regex: finds text inside [ ] separated by a comma
+        # 2. Manually parse the header (first line)
         header_match = re.match(r'^\[(.*?),\s*(.*?)\]$', lines[0])
         if not header_match:
             return JsonResponse({"status": "error", "message": "Could not find valid header. Fit must start with [Ship, Fit Name]."}, status=400)
@@ -256,39 +274,120 @@ def api_submit_fit(request):
         if not ship_name:
             return JsonResponse({"status": "error", "message": "Ship name in header is empty."}, status=400)
 
-        # 4. Get the Type ID for the ship (THIS IS THE FIX)
-        #    This will try to get from DB, or fetch from ESI and cache it
+        # 3. Get the Type ID for the ship (this caches it)
         ship_type = get_or_cache_eve_type(ship_name)
         
         if not ship_type:
-            # This now means the ESI search *also* failed
             return JsonResponse({"status": "error", "message": f"Ship hull '{ship_name}' could not be found in ESI. Check spelling."}, status=400)
         
         ship_type_id = ship_type.type_id
-        # --- END FIX ---
+        
+        # --- 4. NEW: Parse all items in the fit ---
+        parsed_fit_list = [] # For storing JSON
+        fit_summary_counter = Counter() # For auto-approval
+        
+        # Add the hull to both
+        parsed_fit_list.append({
+            "raw_line": lines[0],
+            "type_id": ship_type.type_id,
+            "name": ship_type.name,
+            "icon_url": ship_type.icon_url,
+            "quantity": 1
+        })
+        fit_summary_counter[ship_type.type_id] += 1
 
-        # 5. Save to database
+        # Regex to find item names and quantities
+        # "Item Name" -> group 1: "Item Name", group 3: None
+        # "Item Name x123" -> group 1: "Item Name", group 3: "123"
+        # "Item Name, Charge Name" -> group 1: "Item Name", group 3: None (charge is ignored for now)
+        item_regex = re.compile(r'^(.*?)(?:, .*)?(?: x(\d+))?$')
+
+        # Loop through the rest of the lines
+        for line in lines[1:]:
+            if line.startswith('[') and line.endswith(']'):
+                # This is an empty slot, e.g., [Empty Low Slot]
+                parsed_fit_list.append({
+                    "raw_line": line,
+                    "type_id": None,
+                    "name": line,
+                    "icon_url": None,
+                    "quantity": 0
+                })
+                continue
+
+            # This is an item
+            match = item_regex.match(line)
+            if not match:
+                # Line is probably just whitespace or junk, skip it
+                continue
+                
+            item_name = match.group(1).strip()
+            # --- THIS IS THE FIX ---
+            # The quantity is in group 2, not 3
+            quantity = int(match.group(2)) if match.group(2) else 1
+            # --- END FIX ---
+            
+            if not item_name:
+                continue
+
+            # Get or cache the item
+            item_type = get_or_cache_eve_type(item_name)
+            
+            if item_type:
+                # Add to our JSON list for the modal
+                parsed_fit_list.append({
+                    "raw_line": line,
+                    "type_id": item_type.type_id,
+                    "name": item_type.name,
+                    "icon_url": item_type.icon_url,
+                    "quantity": quantity
+                })
+                # Add to our summary dict for approval
+                fit_summary_counter[item_type.type_id] += quantity
+            else:
+                # Could not find this item in ESI
+                parsed_fit_list.append({
+                    "raw_line": line,
+                    "type_id": None,
+                    "name": f"Unknown Item: {item_name}",
+                    "icon_url": None,
+                    "quantity": quantity
+                })
+                # We can decide if unknown items block approval
+                # For now, we'll just omit them from the summary
+        
+        # --- 5. NEW: Check for Auto-Approval ---
+        doctrine, new_status, new_category = check_fit_against_doctrines(
+            ship_type_id,
+            dict(fit_summary_counter)
+        )
+
+        # 6. Save to database
         fit, created = ShipFit.objects.update_or_create(
             character=character,
             waitlist=open_waitlist,
-            status__in=['PENDING', 'APPROVED', 'IN_FLEET'],
+            status__in=['PENDING', 'APPROVED', 'IN_FLEET'], # Find any existing fit
             defaults={
                 'raw_fit': raw_fit_original,  # Save the *original* fit
-                'status': 'PENDING',
+                'parsed_fit_json': json.dumps(parsed_fit_list), # Save the parsed data
+                'status': new_status, # 'PENDING' or 'APPROVED'
                 'waitlist': open_waitlist,
-                'ship_name': ship_type.name,  # --- Use the canonical name from DB/ESI
+                'ship_name': ship_type.name,
                 'ship_type_id': ship_type_id,
                 'tank_type': 'Shield',        # <-- Placeholder
                 'fit_issues': None,           # <-- Placeholder
-                'category': 'NONE',
+                'category': new_category,     # 'NONE' or from doctrine
                 'submitted_at': timezone.now()
             }
         )
         
+        # --- THIS IS THE FIX ---
+        # All success messages are now generic.
         if created:
             return JsonResponse({"status": "success", "message": f"Fit for {character.character_name} submitted!"})
         else:
             return JsonResponse({"status": "success", "message": f"Fit for {character.character_name} updated."})
+        # --- END FIX ---
 
     except Exception as e:
         # Catch regex errors or other unexpected issues
@@ -318,9 +417,10 @@ def api_update_fit_status(request):
         fit.status = 'APPROVED'
         
         # --- UPDATED: Randomly assign to a 'category' for sorting ---
-        # We no longer touch ship_name or tank_type here
-        categories = ['DPS', 'LOGI', 'SNIPER', 'MAR_DPS', 'MAR_SNIPER']
-        fit.category = random.choice(categories) # <-- Placeholder sorting
+        # We only do this if it wasn't auto-assigned
+        if fit.category == ShipFit.FitCategory.NONE:
+            categories = ['DPS', 'LOGI', 'SNIPER', 'MAR_DPS', 'MAR_SNIPER']
+            fit.category = random.choice(categories) # <-- Placeholder sorting
         # --- END UPDATE ---
         
         fit.save()
@@ -374,6 +474,40 @@ def api_get_waitlist_html(request):
     }
     
     return render(request, '_waitlist_columns.html', context)
+
+
+# --- NEW API VIEW: Get Fit Details for Modal ---
+@login_required
+def api_get_fit_details(request):
+    """
+    Returns the parsed fit JSON for the FC's inspection modal.
+    """
+    if not is_fleet_commander(request.user):
+        return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
+        
+    fit_id = request.GET.get('fit_id')
+    if not fit_id:
+        return HttpResponseBadRequest("Missing fit_id")
+        
+    try:
+        fit = get_object_or_404(ShipFit, id=fit_id)
+        
+        # Check if the user is an FC for the waitlist this fit is on
+        # (This is a good extra check, but we already check for global FC)
+        
+        if not fit.parsed_fit_json:
+            # Fallback: just return the raw fit if no JSON exists
+            return JsonResponse([{"raw_line": line} for line in fit.raw_fit.splitlines()])
+
+        # Load the JSON from the text field and return it
+        parsed_fit_data = json.loads(fit.parsed_fit_json)
+        return JsonResponse(parsed_fit_data, safe=False) # safe=False because it's a list
+
+    except Http404:
+        return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+# --- END NEW VIEW ---
 
 
 # --- NEW FC ADMIN VIEWS ---

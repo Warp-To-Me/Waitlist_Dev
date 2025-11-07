@@ -15,4 +15,7 @@ urlpatterns = [
     path('api/submit_fit/', views.api_submit_fit, name='api_submit_fit'),
     path('api/update_fit_status/', views.api_update_fit_status, name='api_update_fit_status'),
     path('api/get_waitlist_html/', views.api_get_waitlist_html, name='api_get_waitlist_html'),
+    
+    # --- NEW: API for FC Fit Modal ---
+    path('api/get_fit_details/', views.api_get_fit_details, name='api_get_fit_details'),
 ]
