@@ -12,132 +12,101 @@
     }
 
     h1 {
-        border-bottom: 1px solid #444;
+        border-bottom: 0px solid #444;
         padding-bottom: 10px;
         margin-top: 0;
     }
 
-    .fittings-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 20px;
+    /* --- NEW STYLES FOR CATEGORY SECTIONS --- */
+    .fit-category-section {
+        margin-bottom: 30px;
     }
 
-    @media (min-width: 900px) {
-        .fittings-grid {
-            /* Go to two columns on larger screens */
-            grid-template-columns: 1fr 1fr;
-        }
-    }
-
-    .fit-card {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        display: flex;
-        flex-direction: column;
-    }
-
-    .fit-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px 20px;
-        border-bottom: 1px solid #444;
-    }
-
-        .fit-header h2 {
-            margin: 0;
-            font-size: 1.5em;
-            color: #fff;
-        }
-
-        .fit-header span {
-            font-size: 1.1em;
-            font-weight: 500;
-            color: #aaa;
-        }
-
-    .fit-body {
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        gap: 20px;
-    }
-
-    .fit-description {
-        color: #ccc;
-        font-size: 1em;
-        line-height: 1.5;
-    }
-
-    .fit-content {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-
-    @media (min-width: 600px) {
-        .fit-content {
-            grid-template-columns: 200px 1fr; /* Image and list */
-        }
-    }
-
-    .fit-ship-render {
-        width: 100%;
-        max-width: 200px; /* Max width */
-        height: auto;
-        margin: 0 auto; /* Center on mobile */
-    }
-
-    /* We can re-use the .fit-detail-list from base.html */
-    /* This will display the fit just like the FC modal */
-    .fit-display-container {
-        background: #222;
-        border: 1px solid #333;
-        border-radius: 5px;
-        /* Make the list scrollable if it's too long */
-        max-height: 400px;
-        overflow-y: auto;
-    }
-
-    .fit-footer {
-        padding: 15px 20px;
-        border-top: 1px solid #444;
-        background: #303030;
-        border-radius: 0 0 8px 8px;
-        display: flex;
-        justify-content: flex-end;
-    }
-
-    /* Styles for the copy button */
-    .btn-copy-eft {
-        padding: 8px 16px;
-        background-color: #a67c00;
+    .fit-category-header {
+        font-size: 1.8em;
+        font-weight: 600;
         color: #fff;
-        text-decoration: none;
-        border-radius: 5px;
-        font-weight: bold;
-        font-size: 0.9em;
-        transition: background-color 0.2s;
-        cursor: pointer;
-        border: none;
+        border-bottom: 0px solid #555;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
     }
 
-        .btn-copy-eft:hover {
-            background-color: #c99900;
+    .ship-card-grid {
+        display: grid;
+        /* Responsive grid:
+           - 1 column on smallest screens
+           - 2 columns min 400px
+           - 3 columns min 640px
+           - 4 columns min 900px
+           - 5 columns min 1200px
+        */
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+    }
+    /* --- END NEW --- */
+
+
+    /* --- NEW STYLES FOR "SMALL SHIP CARD" --- */
+    .ship-card-small {
+        display: flex;
+        /* MODIFIED: Align to the top so text stacks nicely */
+        align-items: flex-start;
+        gap: 12px;
+        background: #2a2a2a;
+        border: 0px solid #444;
+        border-radius: 8px;
+        padding: 10px;
+        cursor: pointer;
+        transition: background-color 0.2s, border-color 0.2s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+        .ship-card-small:hover {
+            background-color: #333;
+            border-color: #555;
         }
 
-    /* This is for the hidden textareas */
-    .hidden-eft-fit {
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
+    .ship-card-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%; /* Make it a circle */
+        border: 0px solid #555;
+        background-color: #222; /* Fallback */
+        flex-shrink: 0;
     }
+
+    /* --- NEW: Wrapper for text content --- */
+    .ship-card-info {
+        display: flex;
+        flex-direction: column;
+        /* Allow wrapper to shrink and text to truncate */
+        min-width: 0;
+        /* --- NEW: Explicitly align text to the left --- */
+        text-align: left;
+    }
+
+    .ship-card-name {
+        font-size: 1em;
+        font-weight: 600;
+        color: #fff;
+        /* Handle long names */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* --- NEW: Style for the description --- */
+    .ship-card-description {
+        font-size: 0.85em;
+        color: #999;
+        /* Handle text overflow */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px; /* Small space below the name */
+    }
+    /* --- END NEW --- */
+
 
     /* ---
     --- Re-using styles from base.html for the fit list
@@ -191,90 +160,49 @@
 <div class="container">
     <h1>Doctrine Fittings</h1>
 
-    <!-- --- DEBUGGING LINES REMOVED --- -->
+    <!-- ---
+    --- NEW REDESIGNED LAYOUT
+    --- -->
+    {% for group in grouped_fits %}
+    <section class="fit-category-section">
+        <h2 class="fit-category-header">{{ group.name }}</h2>
 
-    <div class="fittings-grid">
-        <!--
-        This is the OUTER loop.
-        It iterates over 'doctrine_fits'.
-        -->
-        {% for fit in doctrine_fits %}
+        <div class="ship-card-grid">
+            {% for fit in group.fits %}
+            <!-- This is the new small card. It's a button for accessibility. -->
+            <button class="ship-card-small"
+                    data-fit-id="{{ fit.id }}"
+                    title="Click to view fit: {{ fit.name }}">
 
-        <!-- --- DEBUGGING LINES REMOVED --- -->
-
-        <div class="fit-card">
-            <div class="fit-header">
-                <h2>{{ fit.name }}</h2>
-                <!-- --- MODIFICATION: Added check for ship_type --- -->
-                <span>{% if fit.ship_type %}{{ fit.ship_type.name }}{% else %}Unknown Ship{% endif %}</span>
-            </div>
-
-            <div class="fit-body">
-                {% if fit.description %}
-                <div class="fit-description">
-                    {{ fit.description }}
-                </div>
+                {% if fit.ship_type %}
+                <img src="https://images.evetech.net/types/{{ fit.ship_type.type_id }}/icon?size=64"
+                     alt="{{ fit.ship_type.name }}"
+                     class="ship-card-icon">
+                {% else %}
+                <!-- Placeholder -->
+                <img src="https://placehold.co/48x48/222/555?text=?"
+                     alt="Unknown Ship"
+                     class="ship-card-icon">
                 {% endif %}
 
-                <div class="fit-content">
-                    <!-- --- MODIFICATION: Added check for ship_type --- -->
-                    {% if fit.ship_type %}
-                    <img src="https://images.evetech.net/types/{{ fit.ship_type.type_id }}/render?size=256"
-                         alt="{{ fit.ship_type.name }}"
-                         class="fit-ship-render">
-                    {% else %}
-                    <!-- Placeholder if ship render is missing -->
-                    <img src="https://placehold.co/200x200/2a2a2a/999?text=No+Ship+Data"
-                         alt="No Ship Render"
-                         class="fit-ship-render">
+                <!-- --- NEW: Text Wrapper --- -->
+                <div class="ship-card-info">
+                    <span class="ship-card-name">{{ fit.name }}</span>
+                    {% if fit.description %}
+                    <span class="ship-card-description">{{ fit.description }}</span>
                     {% endif %}
-                    <!-- --- END MODIFICATION --- -->
-
-                    <div class="fit-display-container">
-                        <ul class="fit-detail-list">
-                            <!--
-                            This is the INNER loop.
-                            It iterates over the items *inside* one fit.
-                            -->
-                            {% for item in fit.get_parsed_fit_list %}
-                            <li title="{{ item.name }}">
-                                {% if item.icon_url %}
-                                <img src="{{ item.icon_url }}" alt="{{ item.name }}" class="fit-modal-icon">
-                                {% elif item.type_id %}
-                                <img src="https://images.evetech.net/types/{{ item.type_id }}/icon?size=32" alt="{{ item.name }}" class="fit-modal-icon" onerror="this.style.display='none'">
-                                {% else %}
-                                <div class="fit-modal-icon-placeholder"></div>
-                                {% endif %}
-                                <span>{{ item.raw_line|escape }}</span>
-                            </li>
-                            {% empty %}
-                            <!-- This 'empty' belongs to the INNER loop -->
-                            <li>Fit data is missing.</li>
-                            {% endfor %} <!-- This 'endfor' closes the INNER loop -->
-                        </ul>
-                    </div>
                 </div>
-            </div>
+                <!-- --- END NEW --- -->
 
-            <div class="fit-footer">
-                <button class="btn-copy-eft" data-fit-id="{{ fit.id }}">Copy EFT Fit</button>
-            </div>
+            </button>
+            {% endfor %} <!-- End inner loop (fits) -->
         </div>
 
-        <!-- Hidden textarea to store the raw fit for copying -->
-        <textarea class="hidden-eft-fit" id="eft-fit-{{ fit.id }}" readonly>{{ fit.raw_fit_eft }}</textarea>
+    </section>
+    {% empty %}
+    <p>There are no doctrine fits configured in the database.</p>
+    {% endfor %} <!-- End outer loop (groups) -->
 
-        <!--
-        This 'empty' belongs to the OUTER loop.
-        It comes *before* the final 'endfor'.
-        -->
-        {% empty %}
-
-        <!-- --- DEBUGGING LINES REMOVED --- -->
-
-        <p>There are no doctrine fits configured in the database.</p>
-        {% endfor %} <!-- This 'endfor' closes the OUTER loop -->
-    </div>
 </div>
 {% endblock %}
 
@@ -282,34 +210,82 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const copyButtons = document.querySelectorAll('.btn-copy-eft');
 
-        copyButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const fitId = button.dataset.fitId;
-                const textarea = document.getElementById(`eft-fit-${fitId}`);
+        // Get modal elements from base.html
+        const doctrineModalOverlay = document.getElementById('doctrine-fit-modal-overlay');
+        const doctrineModalBody = document.getElementById('doctrine-modal-body');
+        const doctrineModalTitle = document.getElementById('doctrine-modal-title');
+        const doctrineModalCopyBtn = document.getElementById('doctrine-modal-copy-btn');
+        const doctrineModalEftHidden = document.getElementById('doctrine-modal-eft-hidden');
 
-                if (textarea) {
-                    try {
-                        textarea.select();
-                        // Use document.execCommand as navigator.clipboard might be restricted
-                        document.execCommand('copy');
+        // Use event delegation on the container
+        const container = document.querySelector('.container');
+        if (container && doctrineModalOverlay) {
 
-                        // Give user feedback
-                        button.textContent = 'Copied!';
-                        setTimeout(() => {
-                            button.textContent = 'Copy EFT Fit';
-                        }, 2000);
-                    } catch (err) {
-                        console.error('Failed to copy text: ', err);
-                        button.textContent = 'Failed to Copy';
-                        setTimeout(() => {
-                            button.textContent = 'Copy EFT Fit';
-                        }, 2000);
-                    }
-                }
+            container.addEventListener('click', (event) => {
+                const card = event.target.closest('.ship-card-small');
+                if (!card) return; // Click wasn't on a card
+
+                const fitId = card.dataset.fitId;
+                if (!fitId) return;
+
+                // 1. Show modal with spinner
+                doctrineModalTitle.textContent = 'Loading Fit...';
+                doctrineModalBody.innerHTML = '<div class="modal-spinner"></div>';
+                doctrineModalCopyBtn.style.display = 'none'; // Hide copy btn
+                doctrineModalOverlay.classList.add('show');
+
+                // 2. Fetch fit details
+                fetch(`{% url 'waitlist:api_get_doctrine_fit_details' %}?fit_id=${fitId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'error') {
+                            throw new Error(data.message);
+                        }
+
+                        // 3. Populate modal content
+                        doctrineModalTitle.textContent = data.name;
+                        doctrineModalEftHidden.value = data.raw_eft;
+                        doctrineModalCopyBtn.style.display = 'block'; // Show copy btn
+
+                        // 4. Build the HTML list for the fit
+                        let html = '<ul class="fit-detail-list">';
+                        if (data.parsed_list && data.parsed_list.length > 0) {
+                            data.parsed_list.forEach(item => {
+                                html += `<li title="${item.name}">`;
+
+                                // Logic for icon
+                                if (item.icon_url) {
+                                    html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
+                                } else if (item.type_id) {
+                                    html += `<img src="https://images.evetech.net/types/${item.type_id}/icon?size=32" alt="${item.name}" class="fit-modal-icon" onerror="this.style.display='none'">`;
+                                } else {
+                                    html += '<div class="fit-modal-icon-placeholder"></div>';
+                                }
+
+                                // Display the raw line, escaping any HTML
+                                const safe_line = item.raw_line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                html += `<span>${safe_line}</span>`;
+                                html += '</li>';
+                            });
+                        } else {
+                            html += '<li>Fit data is missing.</li>';
+                        }
+                        html += '</ul>';
+
+                        doctrineModalBody.innerHTML = html;
+                    })
+                    .catch(error => {
+                        doctrineModalTitle.textContent = 'Error';
+                        doctrineModalBody.innerHTML = `<p style="color: #ff8a8a; padding: 20px;">Error: ${error.message}</p>`;
+                    });
             });
-        });
+        }
     });
 </script>
 {% endblock %}

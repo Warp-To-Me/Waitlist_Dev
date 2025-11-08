@@ -8,6 +8,10 @@ import json
 class EveGroup(models.Model):
     group_id = models.IntegerField(primary_key=True, unique=True)
     name = models.CharField(max_length=255)
+    # --- NEW FIELD ---
+    # We will store the category ID (e.g., 6 for "Ship", 7 for "Module", 16 for "Skill")
+    category_id = models.IntegerField(null=True, blank=True)
+    # --- END NEW FIELD ---
 
     def __str__(self):
         return self.name

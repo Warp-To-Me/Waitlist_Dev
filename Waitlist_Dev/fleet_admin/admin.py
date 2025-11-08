@@ -5,6 +5,8 @@ from waitlist.models import (
     EveCharacter, ShipFit, Fleet, FleetWaitlist, DoctrineFit,
     FitSubstitutionGroup, FleetWing, FleetSquad
 )
+# --- MODIFIED: Import EveType ---
+from pilot.models import EveType
 # --- END MODIFIED ---
 # --- NEW IMPORTS for DoctrineFit Admin ---
 from django import forms
@@ -180,7 +182,10 @@ class DoctrineFitAdmin(admin.ModelAdmin):
     form = DoctrineFitForm
     
     list_display = ('name', 'ship_type', 'category')
-    list_filter = ('category', 'ship_type')
+    # --- MODIFIED: Filter by ship_type's GROUP, not individual ship_type ---
+    # This gives you a clean filter for "Battleship", "Cruiser", etc.
+    list_filter = ('category', 'ship_type__group')
+    # --- END MODIFICATION ---
     search_fields = ('name', 'ship_type__name')
     
     # Make the JSON field collapsible
@@ -204,13 +209,25 @@ class DoctrineFitAdmin(admin.ModelAdmin):
     # ---
     # --- THE FIX IS HERE ---
     # ---
-    # We remove 'fit_items_json', 'raw_fit_eft', and 'parsed_fit_json'
-    # from readonly_fields so the form's clean() method can save them.
-    # We will make 'ship_type' readonly instead, as it's set by the parser.
-    readonly_fields = ('ship_type',)
+    # We remove 'ship_type' from readonly_fields so the form's
+    # clean() method can save the value populated by the parser.
+    readonly_fields = ()
     # ---
     # --- END THE FIX ---
     # ---
+
+    # --- NEW: Filter the dropdowns in the form ---
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "ship_type":
+            # This is the fix.
+            # We filter the QuerySet for the 'ship_type' field
+            # to only include items where the group's category_id is 6 (Category "Ship").
+            kwargs["queryset"] = EveType.objects.filter(
+                group__category_id=6
+            ).select_related('group')
+            
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    # --- END NEW ---
 
 
 # --- NEW: Admin for FitSubstitutionGroup ---

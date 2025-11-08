@@ -38,7 +38,7 @@
             z-index: 100;
             background: #2a2a2a; /* Give it a background */
             padding: 10px 20px; /* Add some padding */
-            border-bottom: 1px solid #444;
+            border-bottom: 0px solid #444;
             height: var(--header-height); /* Set fixed height */
             box-sizing: border-box; /* Include padding in height */
         }
@@ -217,7 +217,7 @@
 
         .modal-content {
             background: #2a2a2a;
-            border: 1px solid #444;
+            border: 0px solid #444;
             border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             width: 90%;
@@ -230,13 +230,14 @@
 
         /* --- NEW: Fit Detail Modal Width --- */
         /* Make the fit detail modal narrower */
-        #fit-detail-modal-overlay .modal-content {
+        #fit-detail-modal-overlay .modal-content,
+        #doctrine-fit-modal-overlay .modal-content { /* --- ADDED: New modal --- */
             max-width: 700px; /* MODIFIED: Was 600px, 700px is good for single list */
         }
 
         .modal-header {
             padding: 15px 20px;
-            border-bottom: 1px solid #444;
+            border-bottom: 0px solid #444;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -270,9 +271,13 @@
         }
 
         /* --- NEW: Fit Detail Modal Body --- */
-        #fit-detail-modal-body {
+        #fit-detail-modal-body,
+        #doctrine-modal-body { /* --- ADDED: New modal --- */
             display: block; /* Override grid */
             padding: 0; /* Remove padding */
+            /* --- NEW: Add max-height for scrolling --- */
+            max-height: 70vh;
+            overflow-y: auto;
         }
 
         @media (min-width: 768px) {
@@ -308,6 +313,17 @@
                 resize: vertical;
             }
 
+        /* --- NEW: Hidden textarea for copy/paste --- */
+        .hidden-eft-fit {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+        /* --- END NEW --- */
+
         .implant-display {
             background: #333;
             border: 1px solid #555;
@@ -321,7 +337,7 @@
                 margin: 0 0 10px 0;
                 font-size: 1.1em;
                 color: #fff;
-                border-bottom: 1px solid #444;
+                border-bottom: 0px solid #444;
                 padding-bottom: 10px;
             }
         /* Spinner for implant loading */
@@ -336,7 +352,8 @@
             margin: 20px auto;
         }
 
-        #fit-detail-modal-body .modal-spinner {
+        #fit-detail-modal-body .modal-spinner,
+        #doctrine-modal-body .modal-spinner { /* --- ADDED: New modal --- */
             margin: 40px auto; /* More margin */
         }
 
@@ -551,7 +568,8 @@
 
         /* --- MODIFICATION: REMOVED two-column grid layout --- */
         @media (min-width: 768px) {
-            #fit-detail-modal-overlay .modal-content {
+            #fit-detail-modal-overlay .modal-content,
+            #doctrine-fit-modal-overlay .modal-content { /* --- ADDED: New modal --- */
                 max-width: 700px; /* Widen the fit modal for the single list */
             }
 
@@ -653,7 +671,7 @@
 
         .modal-footer {
             padding: 15px 20px;
-            border-top: 1px solid #444;
+            border-top: 0px solid #444;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -674,6 +692,26 @@
                 cursor: not-allowed;
                 opacity: 0.6;
             }
+
+        /* --- NEW: Copy Button Style (re-used) --- */
+        .btn-copy-eft {
+            padding: 8px 16px;
+            background-color: #a67c00;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+            .btn-copy-eft:hover {
+                background-color: #c99900;
+            }
+        /* --- END NEW --- */
+
         /* --- END NEW MODAL STYLES --- */
 
         /* --- NEW: Custom Confirm Modal --- */
@@ -730,8 +768,7 @@
         </a>
 
         <!-- --- NEW: Fittings Button --- -->
-        <!-- This is visible to all logged-in users -->
-        <a href="{% url 'waitlist:fittings_view' %}" class="header-btn" style="background-color: #5a3b98;" title="View Doctrine Fittings">
+        <!-- This is visible to all logged-in users --><a href="{% url 'waitlist:fittings_view' %}" class="header-btn" style="background-color: #5a3b98;" title="View Doctrine Fittings">
             Fittings
         </a>
         <!-- --- END NEW --- -->
@@ -862,6 +899,33 @@
     </div>
     {% endif %}
     <!-- --- END NEW FC MODAL --- -->
+    <!--
+    ---
+    --- NEW: DOCTRINE FIT MODAL (for fittings_view.html)
+    ---
+    -->
+    <div class="modal-overlay" id="doctrine-fit-modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="doctrine-modal-title">Doctrine Fit</h2>
+                <button class="modal-close-btn" id="doctrine-modal-close-btn">&times;</button>
+            </div>
+
+            <!-- Body is populated by JS -->
+            <div class="modal-body" id="doctrine-modal-body">
+                <div class="modal-spinner"></div>
+            </div>
+
+            <div class="modal-footer">
+                <!-- Hidden textarea for the copy button -->
+                <textarea class="hidden-eft-fit" id="doctrine-modal-eft-hidden" readonly></textarea>
+                <div class="modal-actions">
+                    <button class="btn-copy-eft" id="doctrine-modal-copy-btn" style="display: none;">Copy EFT Fit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- --- END NEW: DOCTRINE FIT MODAL --- -->
     <!--
     ---
     --- NEW: CUSTOM CONFIRM MODAL (MOVED FROM waitlist_view.html) ---
@@ -1136,6 +1200,48 @@
         }
         // ---
         // --- END CUSTOM CONFIRM SCRIPT ---
+        // ---
+
+        // ---
+        // --- NEW: DOCTRINE FIT MODAL SCRIPT (for fittings_view.html)
+        // ---
+        const doctrineModalOverlay = document.getElementById('doctrine-fit-modal-overlay');
+        const doctrineModalCloseBtn = document.getElementById('doctrine-modal-close-btn');
+        const doctrineModalBody = document.getElementById('doctrine-modal-body');
+        const doctrineModalTitle = document.getElementById('doctrine-modal-title');
+        const doctrineModalCopyBtn = document.getElementById('doctrine-modal-copy-btn');
+        const doctrineModalEftHidden = document.getElementById('doctrine-modal-eft-hidden');
+
+        if (doctrineModalOverlay) {
+            // Close button listener
+            doctrineModalCloseBtn.addEventListener('click', () => {
+                doctrineModalOverlay.classList.remove('show');
+            });
+
+            // Overlay click listener
+            doctrineModalOverlay.addEventListener('click', (e) => {
+                if (e.target === doctrineModalOverlay) {
+                    doctrineModalOverlay.classList.remove('show');
+                }
+            });
+
+            // Copy button listener
+            doctrineModalCopyBtn.addEventListener('click', () => {
+                try {
+                    doctrineModalEftHidden.select();
+                    document.execCommand('copy');
+                    doctrineModalCopyBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        doctrineModalCopyBtn.textContent = 'Copy EFT Fit';
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy EFT fit: ', err);
+                    doctrineModalCopyBtn.textContent = 'Failed';
+                }
+            });
+        }
+        // ---
+        // --- END DOCTRINE FIT MODAL SCRIPT ---
         // ---
 
     </script>

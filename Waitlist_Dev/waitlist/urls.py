@@ -21,6 +21,9 @@ urlpatterns = [
     
     # --- API for FC Fit Modal ---
     path('api/get_fit_details/', views.api_get_fit_details, name='api_get_fit_details'),
+
+    # --- NEW: API for Doctrine Fit Modal ---
+    path('api/get_doctrine_fit_details/', views.api_get_doctrine_fit_details, name='api_get_doctrine_fit_details'),
     
     # --- NEW API FOR ADDING SUBSTITUTIONS ---
     path('api/add_substitution/', views.api_add_substitution, name='api_add_substitution'),

@@ -196,26 +196,76 @@ def fittings_view(request):
     """
     Displays all available doctrine fits for all users to see.
     """
-    # --- MODIFICATION: Force the QuerySet to evaluate into a list ---
-    # This prevents any lazy-loading issues in the template.
-    all_fits_list = list(DoctrineFit.objects.all().select_related('ship_type').order_by('name'))
+    # --- MODIFICATION: Group fits by category ---
+    
+    # 1. Define the category order and display names
+    categories_map = {
+        'LOGI': {'name': 'Logi', 'fits': []},
+        'DPS': {'name': 'DPS', 'fits': []},
+        'SNIPER': {'name': 'Sniper', 'fits': []},
+        'MAR_DPS': {'name': 'MAR DPS', 'fits': []},
+        'MAR_SNIPER': {'name': 'MAR Sniper', 'fits': []},
+        'OTHER': {'name': 'Other', 'fits': []},
+    }
+
+    # 2. Get all fits, ordered correctly
+    all_fits_list = DoctrineFit.objects.all().select_related('ship_type').order_by('category', 'name')
+    
+    # 3. Sort fits into the map
+    for fit in all_fits_list:
+        if fit.category in categories_map:
+            categories_map[fit.category]['fits'].append(fit)
+        elif fit.category != 'NONE':
+            # Fallback for any other categories
+            if 'OTHER' not in categories_map:
+                categories_map['OTHER'] = {'name': 'Other', 'fits': []}
+            categories_map['OTHER']['fits'].append(fit)
+
+    # 4. Create a final list, filtering out empty categories
+    grouped_fits = [data for data in categories_map.values() if data['fits']]
     # --- END MODIFICATION ---
 
-    # 2. Get context variables needed by base.html
+    # 5. Get context variables needed by base.html
     is_fc = request.user.groups.filter(name='Fleet Commander').exists()
     user_characters = EveCharacter.objects.filter(user=request.user)
     
-    # --- MODIFICATION: Rebuild the context dictionary ---
-    # This ensures the variable name 'doctrine_fits' is correctly passed.
     context = {
-        'doctrine_fits': all_fits_list,
+        'grouped_fits': grouped_fits, # Pass the new grouped list
         'is_fc': is_fc,
         'user_characters': user_characters,
     }
-    # --- END MODIFICATION ---
     
     return render(request, 'fittings_view.html', context)
 # --- END NEW VIEW ---
+
+
+# --- NEW API VIEW for Doctrine Fit Modal ---
+@login_required
+def api_get_doctrine_fit_details(request):
+    """
+    Returns the details for a specific doctrine fit.
+    This is for the public fittings page modal.
+    """
+    fit_id = request.GET.get('fit_id')
+    if not fit_id:
+        return HttpResponseBadRequest("Missing fit_id")
+        
+    try:
+        doctrine = get_object_or_404(DoctrineFit, id=fit_id)
+        
+        # Return the data needed by the modal
+        return JsonResponse({
+            "status": "success",
+            "name": doctrine.name,
+            "raw_eft": doctrine.raw_fit_eft,
+            "parsed_list": doctrine.get_parsed_fit_list()
+        })
+        
+    except Http404:
+        return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
+# --- END NEW API VIEW ---
 
 
 # --- NEW API VIEW for Modal Fit Submission ---

@@ -33,6 +33,9 @@ def get_or_cache_eve_group(group_id):
                 group_id=group_id
             ).results()
             group.name = group_data['name']
+            # --- NEW: Save the category_id ---
+            group.category_id = group_data.get('category_id')
+            # --- END NEW ---
             group.save()
             
         return group
@@ -125,6 +128,65 @@ def get_or_cache_eve_type(item_name):
 # --- END MODIFIED FUNCTIONS ---
 
 
+# ---
+# --- NEW HELPER FUNCTION: Get or Cache by ID ---
+# ---
+def get_or_cache_eve_type_by_id(type_id):
+    """
+    Tries to get an EveType from the local DB by its ID.
+    If not found, fetches from ESI and caches it.
+    This is used by the backfill script.
+    """
+    if not type_id:
+        return None
+        
+    try:
+        # 1. Try to get it from the DB first.
+        return EveType.objects.get(type_id=type_id)
+    except EveType.DoesNotExist:
+        try:
+            # 2. Not found, so fetch from ESI
+            esi = EsiClientProvider()
+            type_data = esi.client.Universe.get_universe_types_type_id(
+                type_id=type_id
+            ).results()
+            
+            # 3. Get or cache its group (which also caches the category_id)
+            group = get_or_cache_eve_group(type_data['group_id'])
+            if not group:
+                # This should be rare, but if group fetch fails, we can't proceed
+                raise Exception(f"Failed to fetch group {type_data['group_id']} for type {type_id}")
+                
+            # 4. Get slot (if any)
+            slot = None
+            if 'dogma_attributes' in type_data:
+                for attr in type_data['dogma_attributes']:
+                    if attr['attribute_id'] == 300: # 300 is 'implantSlot'
+                        slot = int(attr['value'])
+                        break
+            
+            # 5. Construct the icon URL
+            icon_url = f"https://images.evetech.net/types/{type_id}/icon?size=32"
+
+            # 6. Create the new EveType object
+            new_type = EveType.objects.create(
+                type_id=type_id,
+                name=type_data['name'],
+                group=group,
+                slot=slot,
+                icon_url=icon_url
+            )
+            return new_type
+            
+        except Exception as e:
+            # ESI call or DB save failed
+            print(f"Error in get_or_cache_eve_type_by_id({type_id}): {e}")
+            return None
+# ---
+# --- END NEW HELPER FUNCTION
+# ---
+
+
 # --- NEW: Centralized EFT Parsing Function ---
 def parse_eft_fit(raw_fit_original: str):
     """
@@ -140,13 +202,26 @@ def parse_eft_fit(raw_fit_original: str):
         raise ValueError("Fit is empty or contains only whitespace.")
 
     # 2. Manually parse the header (first line)
-    header_match = re.match(r'^\[(.*?),\s*(.*?)\]$', lines[0])
+    # --- THIS IS THE FIX ---
+    # The regex is now more specific.
+    # It defines group 1 ([^,]+) as "one or more characters that are NOT a comma".
+    # This correctly captures "Vindicator" from "[Vindicator, Vindicator Entry/Alpha]"
+    # and fails if no comma is present.
+    header_match = re.match(r'^\[([^,]+),\s*(.*?)\]$', lines[0])
+    # --- END FIX ---
     if not header_match:
         raise ValueError("Could not find valid header. Fit must start with [Ship, Fit Name].")
         
-    ship_name = header_match.group(1).strip()
-    if not ship_name:
+    ship_name_raw = header_match.group(1).strip()
+    if not ship_name_raw:
         raise ValueError("Ship name in header is empty.")
+
+    # --- NEW FIX: Strip formatting tags ---
+    # This handles fits copied from chat that might include
+    # <color> tags, e.g., [<color=..._>Vindicator</color>, Fit Name]
+    tag_stripper = re.compile(r'<[^>]+>')
+    ship_name = tag_stripper.sub('', ship_name_raw).strip()
+    # --- END NEW FIX ---
 
     # 3. Get the Type ID for the ship (this caches it)
     ship_type = get_or_cache_eve_type(ship_name)
