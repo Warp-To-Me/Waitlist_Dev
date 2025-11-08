@@ -729,6 +729,12 @@
             Home
         </a>
 
+        <!-- --- NEW: Fittings Button --- -->
+        <!-- This is visible to all logged-in users -->
+        <a href="{% url 'waitlist:fittings_view' %}" class="header-btn" style="background-color: #5a3b98;" title="View Doctrine Fittings">
+            Fittings
+        </a>
+        <!-- --- END NEW --- -->
         <!-- --- FC ADMIN LINKS --- -->
         <!--
         The 'is_fc' variable is passed from the home view.

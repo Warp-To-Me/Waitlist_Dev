@@ -7,6 +7,9 @@ urlpatterns = [
     # Point the root URL to our new dynamic view
     path('', views.home, name='home'),
     
+    # --- NEW: Fittings Page URL ---
+    path('fittings/', views.fittings_view, name='fittings_view'),
+    
     # --- NEW FC ADMIN URLS ---
     path('fc_admin/', views.fc_admin_view, name='fc_admin'),
     path('api/fc_manage_waitlist/', views.api_fc_manage_waitlist, name='api_fc_manage_waitlist'),

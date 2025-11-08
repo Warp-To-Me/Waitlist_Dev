@@ -190,6 +190,28 @@ def home(request):
     return render(request, 'waitlist_view.html', context)
     
 
+# --- NEW: Fittings View ---
+@login_required
+def fittings_view(request):
+    """
+    Displays all available doctrine fits for all users to see.
+    """
+    # 1. Get all doctrine fits, pre-fetch the ship_type
+    doctrine_fits = DoctrineFit.objects.all().select_related('ship_type').order_by('name')
+    
+    # 2. Get context variables needed by base.html
+    is_fc = request.user.groups.filter(name='Fleet Commander').exists()
+    user_characters = EveCharacter.objects.filter(user=request.user)
+    
+    context = {
+        'doctrine_fits': doctrine_fits,
+        'is_fc': is_fc,
+        'user_characters': user_characters,
+    }
+    return render(request, 'fittings_view.html', context)
+# --- END NEW VIEW ---
+
+
 # --- NEW API VIEW for Modal Fit Submission ---
 @login_required
 @require_POST

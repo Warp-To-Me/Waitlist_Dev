@@ -10,7 +10,7 @@ from waitlist.models import (
 from django import forms
 from django.core.exceptions import ValidationError
 # --- MODIFIED: Import renamed function ---
-from waitlist.fit_parser import parse_eft_to_json_summary
+from waitlist.fit_parser import parse_eft_to_full_doctrine_data
 # --- END MODIFIED ---
 import json
 # --- END NEW IMPORTS ---
@@ -143,12 +143,15 @@ class DoctrineFitForm(forms.ModelForm):
         # If the user pasted a fit, parse it
         if eft_fit:
             try:
-                # Run the parser
-                ship_type, fit_summary = parse_eft_to_json_summary(eft_fit)
+                # --- MODIFIED: Run the new parser ---
+                ship_type, fit_summary, parsed_list_json = parse_eft_to_full_doctrine_data(eft_fit)
                 
                 # Success! Populate the real fields
                 cleaned_data['ship_type'] = ship_type
                 cleaned_data['fit_items_json'] = json.dumps(fit_summary)
+                cleaned_data['raw_fit_eft'] = eft_fit
+                cleaned_data['parsed_fit_json'] = parsed_list_json
+                # --- END MODIFICATION ---
             
             except Exception as e:
                 # Parser failed, raise an error on the EFT field
@@ -191,15 +194,16 @@ class DoctrineFitAdmin(admin.ModelAdmin):
             'fields': ('eft_fit_input',)
         }),
         # --- END NEW ---
+        # --- MODIFIED: Added new fields ---
         ('Doctrine Definition (Auto-populated)', {
-            'fields': ('ship_type', 'fit_items_json')
+            'fields': ('ship_type', 'fit_items_json', 'raw_fit_eft', 'parsed_fit_json')
         }),
+        # --- END MODIFICATION ---
     )
     
-    # --- THIS METHOD IS NOW REMOVED ---
-    # def get_form(self, request, obj=None, **kwargs):
-    #    ... (This code is gone) ...
-    # --- END REMOVAL ---
+    # --- MODIFIED: Make auto-populated fields read-only ---
+    readonly_fields = ('fit_items_json', 'raw_fit_eft', 'parsed_fit_json')
+    # --- END MODIFICATION ---
 
 
 # --- NEW: Admin for FitSubstitutionGroup ---

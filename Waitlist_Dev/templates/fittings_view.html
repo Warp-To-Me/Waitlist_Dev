@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% load humanize %}
+<!-- Set the page title -->
+{% block title %}Doctrine Fittings{% endblock %}
+
+{% block styles %}
+<style>
+    .container {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 0 20px;
+    }
+
+    h1 {
+        border-bottom: 1px solid #444;
+        padding-bottom: 10px;
+        margin-top: 0;
+    }
+
+    .fittings-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    @media (min-width: 900px) {
+        .fittings-grid {
+            /* Go to two columns on larger screens */
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .fit-card {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fit-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        border-bottom: 1px solid #444;
+    }
+
+        .fit-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+            color: #fff;
+        }
+
+        .fit-header span {
+            font-size: 1.1em;
+            font-weight: 500;
+            color: #aaa;
+        }
+
+    .fit-body {
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        gap: 20px;
+    }
+
+    .fit-description {
+        color: #ccc;
+        font-size: 1em;
+        line-height: 1.5;
+    }
+
+    .fit-content {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    @media (min-width: 600px) {
+        .fit-content {
+            grid-template-columns: 200px 1fr; /* Image and list */
+        }
+    }
+
+    .fit-ship-render {
+        width: 100%;
+        max-width: 200px; /* Max width */
+        height: auto;
+        margin: 0 auto; /* Center on mobile */
+    }
+
+    /* We can re-use the .fit-detail-list from base.html */
+    /* This will display the fit just like the FC modal */
+    .fit-display-container {
+        background: #222;
+        border: 1px solid #333;
+        border-radius: 5px;
+        /* Make the list scrollable if it's too long */
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .fit-footer {
+        padding: 15px 20px;
+        border-top: 1px solid #444;
+        background: #303030;
+        border-radius: 0 0 8px 8px;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    /* Styles for the copy button */
+    .btn-copy-eft {
+        padding: 8px 16px;
+        background-color: #a67c00;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        font-size: 0.9em;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        border: none;
+    }
+
+        .btn-copy-eft:hover {
+            background-color: #c99900;
+        }
+
+    /* This is for the hidden textareas */
+    .hidden-eft-fit {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+    }
+
+    /* ---
+    --- Re-using styles from base.html for the fit list
+    --- */
+    .fit-detail-list {
+        list-style: none;
+        padding: 10px;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.85em;
+    }
+
+        .fit-detail-list li {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            white-space: pre;
+        }
+
+            .fit-detail-list li:nth-child(even) {
+                background: #333;
+            }
+
+            .fit-detail-list li:first-child {
+                font-weight: bold;
+                color: #fff;
+                background: #3a3a3a;
+            }
+
+    .fit-modal-icon {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+    }
+
+    .fit-modal-icon-placeholder {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container">
+    <h1>Doctrine Fittings</h1>
+
+    <div class="fittings-grid">
+        {% for fit in doctrine_fits %}
+        <div class="fit-card">
+            <div class="fit-header">
+                <h2>{{ fit.name }}</h2>
+                <span>{{ fit.ship_type.name }}</span>
+            </div>
+
+            <div class="fit-body">
+                {% if fit.description %}
+                <div class="fit-description">
+                    {{ fit.description }}
+                </div>
+                {% endif %}
+
+                <div class="fit-content">
+                    <img src="https://images.evetech.net/types/{{ fit.ship_type.type_id }}/render?size=256"
+                         alt="{{ fit.ship_type.name }}"
+                         class="fit-ship-render">
+
+                    <div class="fit-display-container">
+                        <ul class="fit-detail-list">
+                            {% for item in fit.get_parsed_fit_list %}
+                            <li title="{{ item.name }}">
+                                {% if item.icon_url %}
+                                <img src="{{ item.icon_url }}" alt="{{ item.name }}" class="fit-modal-icon">
+                                {% elif item.type_id %}
+                                <img src="https://images.evetech.net/types/{{ item.type_id }}/icon?size=32" alt="{{ item.name }}" class="fit-modal-icon" onerror="this.style.display='none'">
+                                {% else %}
+                                <div class="fit-modal-icon-placeholder"></div>
+                                {% endif %}
+                                <span>{{ item.raw_line|escape }}</span>
+                            </li>
+                            {% empty %}
+                            <li>Fit data is missing.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fit-footer">
+                <button class="btn-copy-eft" data-fit-id="{{ fit.id }}">Copy EFT Fit</button>
+            </div>
+        </div>
+
+        <!-- Hidden textarea to store the raw fit for copying -->
+        <textarea class="hidden-eft-fit" id="eft-fit-{{ fit.id }}" readonly>{{ fit.raw_fit_eft }}</textarea>
+
+        {% empty %}
+        <p>There are no doctrine fits configured in the database.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const copyButtons = document.querySelectorAll('.btn-copy-eft');
+
+        copyButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const fitId = button.dataset.fitId;
+                const textarea = document.getElementById(`eft-fit-${fitId}`);
+
+                if (textarea) {
+                    try {
+                        textarea.select();
+                        document.execCommand('copy');
+
+                        // Give user feedback
+                        button.textContent = 'Copied!';
+                        setTimeout(() => {
+                            button.textContent = 'Copy EFT Fit';
+                        }, 2000);
+                    } catch (err) {
+                        console.error('Failed to copy text: ', err);
+                        button.textContent = 'Failed to Copy';
+                         setTimeout(() => {
+                            button.textContent = 'Copy EFT Fit';
+                        }, 2000);
+                    }
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

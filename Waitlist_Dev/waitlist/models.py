@@ -226,6 +226,19 @@ class DoctrineFit(models.Model):
     )
 
     description = models.TextField(blank=True, null=True)
+    
+    # --- NEW FIELDS ---
+    raw_fit_eft = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="The raw EFT-formatted fit string."
+    )
+    parsed_fit_json = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="JSON representation of the parsed fit (slotted)."
+    )
+    # --- END NEW FIELDS ---
 
     def __str__(self):
         return self.name
@@ -238,6 +251,20 @@ class DoctrineFit(models.Model):
             return json.loads(self.fit_items_json)
         except json.JSONDecodeError:
             return {}
+
+    # --- NEW HELPER METHOD ---
+    def get_parsed_fit_list(self):
+        """
+        Helper method to get the parsed, slotted fit
+        list from the JSON blob.
+        """
+        if not self.parsed_fit_json:
+            return []
+        try:
+            return json.loads(self.parsed_fit_json)
+        except json.JSONDecodeError:
+            return []
+    # --- END NEW HELPER METHOD ---
 # --- END NEW MODEL ---
 
 

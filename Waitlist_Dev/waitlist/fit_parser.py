@@ -229,17 +229,19 @@ def parse_eft_fit(raw_fit_original: str):
 
 # --- NEW PARSING FUNCTION FOR ADMIN ---
 
-def parse_eft_to_json_summary(raw_fit_original: str):
+def parse_eft_to_full_doctrine_data(raw_fit_original: str):
     """
-    Parses a raw EFT fit string and returns the ship_type object
-    and a {type_id: quantity} summary dictionary.
+    Parses a raw EFT fit string and returns the ship_type object,
+    a {type_id: quantity} summary dictionary, and the full
+    parsed_fit_list as a JSON string.
     Used by the DoctrineFit admin form.
     
     --- MODIFIED: This now calls the centralized parser ---
     """
     try:
-        ship_type, _, fit_summary_counter = parse_eft_fit(raw_fit_original)
-        return ship_type, dict(fit_summary_counter)
+        ship_type, parsed_fit_list, fit_summary_counter = parse_eft_fit(raw_fit_original)
+        # Return all three components
+        return ship_type, dict(fit_summary_counter), json.dumps(parsed_fit_list)
     except ValueError as e:
         # Re-raise as a generic exception for the admin form
         raise Exception(str(e))
