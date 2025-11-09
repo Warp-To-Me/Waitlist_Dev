@@ -239,12 +239,123 @@ def fittings_view(request):
 # --- END NEW VIEW ---
 
 
+# ---
+# --- NEW HELPER: Build Slotted Fit (for Doctrine Modal)
+# ---
+def _build_slotted_fit_context(ship_eve_type, parsed_fit_list):
+    """
+    Takes a ship's EveType and a parsed fit list (from JSON)
+    and returns a fully slotted fit dictionary.
+    """
+    
+    # 1. Get base slot counts from the ship's EveType
+    # (Default to 0 if null)
+    slot_counts = {
+        'high': int(ship_eve_type.hi_slots or 0),
+        'mid': int(ship_eve_type.med_slots or 0),
+        'low': int(ship_eve_type.low_slots or 0),
+        'rig': int(ship_eve_type.rig_slots or 0),
+        'subsystem': int(ship_eve_type.subsystem_slots or 0)
+    }
+    
+    # 2. Check if this is a T3 Cruiser
+    is_t3c = slot_counts['subsystem'] > 0
+    
+    # 3. Get all item EveTypes from the DB in one query
+    item_ids = [item['type_id'] for item in parsed_fit_list if item.get('type_id')]
+    item_types_map = {t.type_id: t for t in EveType.objects.filter(type_id__in=item_ids)}
+
+    # 4. Create bins for all fitted items
+    item_bins = {
+        'high': [], 'mid': [], 'low': [], 'rig': [], 
+        'subsystem': [], 'drone': [], 'cargo': []
+    }
+    
+    for item in parsed_fit_list:
+        type_id = item.get('type_id')
+        if not type_id or type_id == ship_eve_type.type_id:
+            continue # Skip hull or invalid items
+
+        item_type = item_types_map.get(type_id)
+        if not item_type:
+            continue # Unknown item
+            
+        # Create the item object
+        item_obj = {
+            "type_id": type_id,
+            "name": item_type.name,
+            "icon_url": item_type.icon_url,
+            "quantity": item.get('quantity', 1),
+            "raw_line": item.get('raw_line', item_type.name),
+            "is_empty": False
+        }
+        
+        # Sort item into the correct bin
+        slot_type = item_type.slot_type
+        if slot_type in item_bins:
+            item_bins[slot_type].append(item_obj)
+        else:
+            # Not a slotted module or drone, must be cargo
+            item_bins['cargo'].append(item_obj)
+
+    # 5. Create the final slotted structure
+    final_slots = {}
+    
+    # For T3Cs, we just show what's fitted. We don't pad with empty slots
+    # because we can't be sure of the final slot count without complex dogma logic.
+    if is_t3c:
+        final_slots = item_bins # Just return the bins of fitted items
+        # Set counts to the *fitted* amount
+        slot_counts['high'] = len(item_bins['high'])
+        slot_counts['mid'] = len(item_bins['mid'])
+        slot_counts['low'] = len(item_bins['low'])
+        slot_counts['rig'] = len(item_bins['rig'])
+        # Subsystem count is from the hull
+        
+    else:
+        # For regular ships, pad with empty slots
+        for slot_key in ['high', 'mid', 'low', 'rig', 'subsystem']:
+            total_slots = slot_counts[slot_key]
+            fitted_items = item_bins[slot_key]
+            
+            # Create a list of N empty slots
+            empty_slot_name = f"[Empty {slot_key.capitalize()} Slot]"
+            slot_list = [{"name": empty_slot_name, "is_empty": True}] * total_slots
+            
+            # Replace empty slots with fitted items
+            for i, item in enumerate(fitted_items):
+                if i < total_slots:
+                    slot_list[i] = item
+            
+            final_slots[slot_key] = slot_list
+
+        # Drones and cargo are just lists
+        final_slots['drone'] = item_bins['drone']
+        final_slots['cargo'] = item_bins['cargo']
+
+    return {
+        "ship": {
+            "type_id": ship_eve_type.type_id,
+            "name": ship_eve_type.name,
+            "icon_url": f"https://images.evetech.net/types/{ship_eve_type.type_id}/render?size=128"
+        },
+        "slots": final_slots,
+        "slot_counts": slot_counts,
+        "is_t3c": is_t3c
+    }
+# ---
+# --- END NEW HELPER
+# ---
+
+
 # --- NEW API VIEW for Doctrine Fit Modal ---
 @login_required
 def api_get_doctrine_fit_details(request):
     """
     Returns the details for a specific doctrine fit.
     This is for the public fittings page modal.
+    
+    --- MODIFIED TO RETURN NEW SLOTTED STRUCTURE ---
     """
     fit_id = request.GET.get('fit_id')
     if not fit_id:
@@ -253,12 +364,29 @@ def api_get_doctrine_fit_details(request):
     try:
         doctrine = get_object_or_404(DoctrineFit, id=fit_id)
         
-        # Return the data needed by the modal
+        # 1. Get the ship's EveType
+        ship_eve_type = doctrine.ship_type
+        if not ship_eve_type:
+            raise Http404("Doctrine fit is missing a ship type.")
+            
+        # 2. Get the parsed list of items
+        parsed_list = doctrine.get_parsed_fit_list()
+        if not parsed_list:
+            # Fallback: re-parse from raw EFT
+            if doctrine.raw_fit_eft:
+                _, parsed_list, _ = parse_eft_fit(doctrine.raw_fit_eft)
+            else:
+                parsed_list = [] # No data
+
+        # 3. Build the slotted context
+        slotted_context = _build_slotted_fit_context(ship_eve_type, parsed_list)
+
+        # 4. Return the new structure + the raw EFT for copying
         return JsonResponse({
             "status": "success",
             "name": doctrine.name,
             "raw_eft": doctrine.raw_fit_eft,
-            "parsed_list": doctrine.get_parsed_fit_list()
+            "slotted_fit": slotted_context # <-- NEW
         })
         
     except Http404:
@@ -437,7 +565,7 @@ def api_get_fit_details(request):
     """
     Returns the parsed fit JSON for the FC's inspection modal.
     
-    --- MODIFIED TO DO COMPARISON AND RETURN FULL FIT ---
+    --- HEAVILY MODIFIED TO RETURN NEW SLOTTED STRUCTURE WITH COMPARISON ---
     """
     if not is_fleet_commander(request.user):
         return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
@@ -449,169 +577,181 @@ def api_get_fit_details(request):
     try:
         fit = get_object_or_404(ShipFit, id=fit_id)
         
-        # 1. Get the pilot's submitted fit list and summary
+        # 1. Get the ship's EveType and base slot counts
+        ship_eve_type = EveType.objects.filter(type_id=fit.ship_type_id).first()
+        if not ship_eve_type:
+            return JsonResponse({"status": "error", "message": "Ship hull not found in SDE cache."}, status=404)
+            
+        slot_counts = {
+            'high': int(ship_eve_type.hi_slots or 0),
+            'mid': int(ship_eve_type.med_slots or 0),
+            'low': int(ship_eve_type.low_slots or 0),
+            'rig': int(ship_eve_type.rig_slots or 0),
+            'subsystem': int(ship_eve_type.subsystem_slots or 0)
+        }
+        is_t3c = slot_counts['subsystem'] > 0
+
+        # 2. Get the pilot's submitted fit list
         try:
             full_fit_list = json.loads(fit.parsed_fit_json) if fit.parsed_fit_json else []
         except json.JSONDecodeError:
             full_fit_list = [] # Handle corrupted JSON
             
-        submitted_items_to_check = Counter(fit.get_parsed_fit_summary())
-        
-        # 2. Get the best matching doctrine
+        # 3. Get the best matching doctrine
         doctrine = DoctrineFit.objects.filter(ship_type__type_id=fit.ship_type_id).first()
         
-        # --- MODIFIED: Create new list for frontend ---
-        full_fit_list_with_status = []
+        # 4. --- START NEW COMPARISON LOGIC ---
         
-        if not doctrine:
-            # No doctrine found, mark all items (except hull) as problems
-            hull_id_str = str(fit.ship_type_id)
-            for item in full_fit_list:
-                item_id_str = str(item.get('type_id'))
-                if not item_id_str or item_id_str == 'None' or item_id_str == hull_id_str:
-                    item['status'] = 'doctrine' # Treat hull/empty slots as fine
-                else:
-                    item['status'] = 'problem'
-                    item['potential_matches'] = [] # No doctrine, so no matches
-                full_fit_list_with_status.append(item)
-            
-            return JsonResponse({
-                "full_fit_with_status": full_fit_list_with_status,
-                "missing_items": [],
-                "doctrine_name": "No Doctrine Found"
-            })
+        # 4a. Get all EveTypes for items in the fit
+        item_ids = [item['type_id'] for item in full_fit_list if item.get('type_id')]
+        item_types_map = {t.type_id: t for t in EveType.objects.filter(type_id__in=item_ids)}
 
-        # 3. Get doctrine items and substitution maps
-        doctrine_items_to_fill = Counter(doctrine.get_fit_items())
+        # 4b. Get doctrine items and substitution maps
+        doctrine_items_to_fill = Counter()
+        doctrine_name = "No Doctrine Found"
+        if doctrine:
+            doctrine_name = doctrine.name
+            doctrine_items_to_fill = Counter(doctrine.get_fit_items())
+            
         sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
-        
-        # sub_map: {'base_id': {base_id, sub_id1, sub_id2}}
-        sub_map = {}
-        # reverse_sub_map: {'sub_id': 'base_id'}
-        reverse_sub_map = {}
+        sub_map = {} # { 'base_id': {set of allowed_ids} }
+        reverse_sub_map = {} # { 'sub_id': 'base_id' }
         
         for group in sub_groups:
             base_id_str = str(group.base_item_id)
             allowed_ids = {str(sub.type_id) for sub in group.substitutes.all()}
-            allowed_ids.add(base_id_str) # The base item is always allowed
+            allowed_ids.add(base_id_str)
             sub_map[base_id_str] = allowed_ids
-            
             for sub_id_str in allowed_ids:
                 if sub_id_str != base_id_str:
                     reverse_sub_map[sub_id_str] = base_id_str
 
-        # 4. Perform the comparison
+        # 4c. Create bins to sort items into
+        item_bins = {
+            'high': [], 'mid': [], 'low': [], 'rig': [], 
+            'subsystem': [], 'drone': [], 'cargo': []
+        }
         
-        # --- Create a copy to track remaining needed items
+        # 4d. Create a copy of doctrine items to "consume" as we find matches
         doctrine_items_to_fill_copy = doctrine_items_to_fill.copy()
         
-        # --- Lists to gather IDs for SDE enrichment
-        problem_potential_match_ids = set()
-        accepted_sub_base_ids = set()
-
-        # --- Pass 1 & 2: Mark Exact Matches and Accepted Subs
+        # 4e. Process every item in the user's fit
         for item in full_fit_list:
-            item_id_str = str(item.get('type_id'))
-            if not item_id_str or item_id_str == 'None':
-                item['status'] = 'doctrine' # Empty slots are fine
-                full_fit_list_with_status.append(item)
-                continue
+            type_id = item.get('type_id')
+            if not type_id or type_id == ship_eve_type.type_id:
+                continue # Skip hull or invalid items
             
-            qty_in_fit = item.get('quantity', 1) # Get qty from the parsed list item
+            item_type = item_types_map.get(type_id)
+            if not item_type:
+                continue # Unknown item
+            
+            item_id_str = str(type_id)
+            qty_in_fit = item.get('quantity', 1)
 
-            # Check for exact match
-            if item_id_str in doctrine_items_to_fill_copy and doctrine_items_to_fill_copy[item_id_str] > 0:
-                item['status'] = 'doctrine'
-                doctrine_items_to_fill_copy[item_id_str] -= qty_in_fit
-            
-            # Check for accepted substitute
-            elif item_id_str in reverse_sub_map:
-                base_item_id = reverse_sub_map[item_id_str]
-                if base_item_id in doctrine_items_to_fill_copy and doctrine_items_to_fill_copy[base_item_id] > 0:
-                    item['status'] = 'accepted_sub'
-                    item['substitutes_for_id'] = base_item_id # Store ID
-                    accepted_sub_base_ids.add(base_item_id)
-                    doctrine_items_to_fill_copy[base_item_id] -= qty_in_fit
-            
-            full_fit_list_with_status.append(item)
+            # 4f. Create the item object, starting with no status
+            item_obj = {
+                "type_id": type_id,
+                "name": item_type.name,
+                "icon_url": item_type.icon_url,
+                "quantity": qty_in_fit,
+                "raw_line": item.get('raw_line', item_type.name),
+                "is_empty": False,
+                "status": "doctrine", # Default to 'doctrine' (good)
+                "potential_matches": [],
+                "substitutes_for": []
+            }
 
-        # --- Pass 3: Mark Problems
-        problem_types_map = {} # {p_id: p_type_obj}
-        missing_types_map = {} # {m_id: m_type_obj}
-        
-        for item in full_fit_list_with_status:
-            if 'status' in item: # Already processed
-                continue
+            # 4g. Check for matches
+            if not doctrine:
+                # No doctrine, so anything that's not a drone/cargo is a "problem"
+                if item_type.slot_type and item_type.slot_type not in ['drone', 'cargo']:
+                    item_obj['status'] = 'problem'
+            else:
+                # We have a doctrine, check for match
+                if item_id_str in doctrine_items_to_fill_copy and doctrine_items_to_fill_copy[item_id_str] > 0:
+                    # Exact Match
+                    item_obj['status'] = 'doctrine'
+                    doctrine_items_to_fill_copy[item_id_str] -= qty_in_fit
                 
-            item_id_str = str(item.get('type_id'))
-            item['status'] = 'problem'
-            item['potential_matches'] = [] # Default
-            
-            # Find potential matches from the same group
-            try:
-                p_type = EveType.objects.get(type_id=item_id_str)
-                problem_types_map[p_type.type_id] = p_type
+                elif item_id_str in reverse_sub_map:
+                    # Substitute Match
+                    base_item_id = reverse_sub_map[item_id_str]
+                    if base_item_id in doctrine_items_to_fill_copy and doctrine_items_to_fill_copy[base_item_id] > 0:
+                        item_obj['status'] = 'accepted_sub'
+                        base_type = EveType.objects.get(type_id=base_item_id) # Get sub info
+                        item_obj['substitutes_for'] = [{
+                            "name": base_type.name,
+                            "type_id": base_type.type_id,
+                            "icon_url": base_type.icon_url,
+                            "quantity": doctrine_items_to_fill.get(base_item_id, 0)
+                        }]
+                        doctrine_items_to_fill_copy[base_item_id] -= qty_in_fit
+                    else:
+                        # It's a sub for an item, but not one we need (or we have enough)
+                        item_obj['status'] = 'problem'
                 
-                # Find missing doctrine items from the same group
+                else:
+                    # No match, it's a problem
+                    item_obj['status'] = 'problem'
+
+            # 4h. Find potential matches for 'problem' items
+            if item_obj['status'] == 'problem' and item_type.group_id:
                 missing_ids_in_group = {
-                    m_id_str for m_id_str, qty in doctrine_items_to_fill_copy.items() 
+                    int(m_id_str) for m_id_str, qty in doctrine_items_to_fill_copy.items() 
                     if qty > 0
                 }
-                
                 if missing_ids_in_group:
                     missing_in_group = EveType.objects.filter(
-                        type_id__in=missing_ids_in_group, 
-                        group=p_type.group
+                        group_id=item_type.group_id,
+                        type_id__in=missing_ids_in_group
                     )
                     for m_type in missing_in_group:
-                        # --- FIX: Ensure we only suggest matches that are still needed ---
-                        if doctrine_items_to_fill_copy.get(str(m_type.type_id), 0) > 0:
-                            missing_types_map[m_type.type_id] = m_type
-                            problem_potential_match_ids.add(m_type.type_id)
-                            item['potential_matches'].append(m_type.type_id) # Store ID
-            except EveType.DoesNotExist:
-                pass # Unknown item, no potential matches
-
-
-        # 5. Enrich the lists
-        
-        # --- Get EveType info for all referenced IDs
-        all_referenced_ids = problem_potential_match_ids | accepted_sub_base_ids
-        referenced_types = {
-            str(t.type_id): t for t in EveType.objects.filter(type_id__in=all_referenced_ids)
-        }
-
-        # --- Loop back and populate names/icons
-        for item in full_fit_list_with_status:
-            if item.get('status') == 'accepted_sub':
-                base_id = str(item['substitutes_for_id'])
-                base_type = referenced_types.get(base_id)
-                if base_type:
-                    item['substitutes_for'] = [{ # Store as list
-                        "name": base_type.name, 
-                        "type_id": base_type.type_id, 
-                        "icon_url": base_type.icon_url,
-                        "quantity": doctrine_items_to_fill.get(base_id, 0) 
-                    }]
-            
-            elif item.get('status') == 'problem':
-                matches = []
-                for match_id in item.get('potential_matches', []):
-                    match_type = referenced_types.get(str(match_id))
-                    # --- FIX: Check match_type and that it's still needed ---
-                    if match_type and doctrine_items_to_fill_copy.get(str(match_id), 0) > 0:
-                        matches.append({
-                            "name": match_type.name, 
-                            "type_id": match_type.type_id, 
-                            "icon_url": match_type.icon_url,
-                            "quantity": doctrine_items_to_fill_copy.get(str(match_id), 0)
+                        item_obj['potential_matches'].append({
+                            "name": m_type.name, 
+                            "type_id": m_type.type_id, 
+                            "icon_url": m_type.icon_url,
+                            "quantity": doctrine_items_to_fill_copy.get(str(m_type.type_id), 0)
                         })
-                item['potential_matches'] = matches
 
-        # 6. Get EveType info for the "Missing Items" column
+            # 4i. Sort item into the correct bin
+            slot_type = item_type.slot_type
+            if slot_type in item_bins:
+                item_bins[slot_type].append(item_obj)
+            else:
+                item_bins['cargo'].append(item_obj)
+        
+        # 5. Create the final slotted structure
+        final_slots = {}
+        
+        if is_t3c:
+            # T3C: Just show fitted items, update slot_counts to fitted count
+            final_slots = item_bins
+            slot_counts['high'] = len(item_bins['high'])
+            slot_counts['mid'] = len(item_bins['mid'])
+            slot_counts['low'] = len(item_bins['low'])
+            slot_counts['rig'] = len(item_bins['rig'])
+        else:
+            # Regular Ship: Pad with empty slots
+            for slot_key in ['high', 'mid', 'low', 'rig', 'subsystem']:
+                total_slots = slot_counts[slot_key]
+                fitted_items = item_bins[slot_key]
+                
+                empty_slot_name = f"[Empty {slot_key.capitalize()} Slot]"
+                slot_list = [{"name": empty_slot_name, "is_empty": True, "status": "empty"}] * total_slots
+                
+                for i, item in enumerate(fitted_items):
+                    if i < total_slots:
+                        slot_list[i] = item
+                
+                final_slots[slot_key] = slot_list
+
+            final_slots['drone'] = item_bins['drone']
+            final_slots['cargo'] = item_bins['cargo']
+            
+        # 6. Find any remaining "Missing" items
         final_missing_ids = {
-            m_id_str for m_id_str, qty in doctrine_items_to_fill_copy.items() 
-            if qty > 0 and str(m_id_str) != str(fit.ship_type_id)
+            int(m_id_str) for m_id_str, qty in doctrine_items_to_fill_copy.items() 
+            if qty > 0 and int(m_id_str) != fit.ship_type_id
         }
         missing_types = EveType.objects.filter(type_id__in=final_missing_ids)
         missing_items = [{
@@ -621,15 +761,32 @@ def api_get_fit_details(request):
             "quantity": doctrine_items_to_fill_copy[str(t.type_id)]
         } for t in missing_types]
 
+
+        # 7. Return the full structure
         return JsonResponse({
-            "full_fit_with_status": full_fit_list_with_status,
-            "missing_items": missing_items, # Still useful for the "Make Sub" dropdown
-            "doctrine_name": doctrine.name
+            "status": "success",
+            "name": f"{fit.character.character_name} vs. {doctrine_name}",
+            "slotted_fit": {
+                "ship": {
+                    "type_id": ship_eve_type.type_id,
+                    "name": ship_eve_type.name,
+                    "icon_url": f"https://images.evetech.net/types/{ship_eve_type.type_id}/render?size=128"
+                },
+                "slots": final_slots,
+                "slot_counts": slot_counts,
+                "is_t3c": is_t3c
+            },
+            "missing_items": missing_items, # For the 'Make Sub' dropdown
+            "doctrine_name": doctrine_name
         })
 
     except Http404:
         return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
     except Exception as e:
+        # --- ADDED: Print exception for debugging ---
+        import traceback
+        print(traceback.format_exc())
+        # --- END ADDED ---
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 # --- END MODIFICATION ---
 

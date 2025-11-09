@@ -530,6 +530,149 @@ It will be filled by the partial template on page load.
     let currentModalFitId = null;
 
 
+    // ---
+    // --- NEW: Complex HTML Builder for FC Modal (replaces simple one)
+    // ---
+    function buildSlottedFitHtml(data) {
+        const fit = data.slotted_fit;
+        if (!fit || !fit.ship || !fit.slots) {
+            return '<p style="color: #ff8a8a; padding: 20px;">Error: Invalid fit data received.</p>';
+        }
+
+        let html = '<div class="fit-modal-layout">';
+
+        // --- 1. Ship Render Column ---
+        html += `<div class="fit-modal-ship-render">
+                    <img src="${fit.ship.icon_url}" alt="${fit.ship.name}">
+                    <span>${fit.ship.name}</span>
+                 </div>`;
+
+        // --- 2. Slot Banks Column ---
+        html += '<div class="fit-modal-slot-banks">';
+
+        const slotOrder = ['high', 'mid', 'low', 'rig', 'subsystem', 'drone', 'cargo'];
+        const slotNames = {
+            high: 'High Slots', mid: 'Mid Slots', low: 'Low Slots',
+            rig: 'Rig Slots', subsystem: 'Subsystem Slots',
+            drone: 'Drones', cargo: 'Cargo Hold'
+        };
+
+        slotOrder.forEach(slotKey => {
+            const items = fit.slots[slotKey];
+            const count = fit.slot_counts[slotKey] || 0;
+
+            if (!items || items.length === 0) {
+                return; // Don't render empty sections
+            }
+
+            // Build header
+            html += '<div class="fit-slot-bank">';
+            html += '<div class="fit-slot-bank-header">';
+            html += `${slotNames[slotKey]} `;
+
+            if (!fit.is_t3c && slotKey !== 'drone' && slotKey !== 'cargo') {
+                 const fitted_count = items.filter(i => !i.is_empty).length;
+                 html += `<span>(${fitted_count} / ${count})</span>`;
+            }
+            html += '</div>';
+
+            // Build item list
+            html += '<ul class="fit-slot-list">';
+            items.forEach(item => {
+                let itemClass = item.is_empty ? 'is-empty' : '';
+
+                // Add status class (e.g., 'fit-item-problem')
+                if (item.status) {
+                    itemClass += ` fit-item-${item.status}`;
+                }
+
+                html += `<li class="fit-slot-item ${itemClass}" title="${item.name}">`;
+
+                if (item.is_empty) {
+                    html += `<img src="https://images.evetech.net/types/2965/icon?size=32" alt="Empty Slot" class="fit-modal-icon" style="opacity: 0.2;">`;
+                    html += `<span class="fit-item-name">${item.name}</span>`;
+                } else {
+                    html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
+                    const line_text = item.raw_line || item.name;
+                    const safe_line = line_text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    html += `<span class="fit-item-name">${safe_line}</span>`;
+                }
+
+                // --- THIS IS THE NEW PART FOR FC MODAL ---
+                let buttonsHtml = '';
+                let indentedListHtml = '';
+
+                if (item.status === 'accepted_sub') {
+                    if (item.substitutes_for && item.substitutes_for.length > 0) {
+                        indentedListHtml = '<ul class="fit-item-sub-for-list">';
+                        item.substitutes_for.forEach(match => {
+                            indentedListHtml += `<li class="fit-item-sub-for-item">`;
+                            indentedListHtml += `<img src="${match.icon_url}" alt="${match.name}">`;
+                            indentedListHtml += `<span>Substitutes for: ${match.name} (x${match.quantity})</span>`;
+                            indentedListHtml += `</li>`;
+                        });
+                        indentedListHtml += '</ul>';
+                    }
+                }
+                else if (item.status === 'problem') {
+                    if (item.potential_matches && item.potential_matches.length > 0) {
+                        indentedListHtml = '<ul class="fit-item-missing-list">';
+                        item.potential_matches.forEach(match => {
+                            indentedListHtml += `<li class="fit-item-missing-item">`;
+                            indentedListHtml += `<img src="${match.icon_url}" alt="${match.name}">`;
+                            indentedListHtml += `<span>Missing: ${match.name} (x${match.quantity})</span>`;
+                            indentedListHtml += `</li>`;
+                        });
+                        indentedListHtml += '</ul>';
+
+                        // Add the accept button
+                        const match = item.potential_matches[0];
+                        buttonsHtml = `<div class="sub-action-buttons">
+                            <button class="fc-btn btn-approve js-sub-accept"
+                                data-problem-item-id="${item.type_id}"
+                                data-problem-item-name="${item.name}"
+                                data-missing-item-id="${match.type_id}"
+                                data-missing-item-name="${match.name}"
+                                title="Accept ${item.name} as substitute for ${match.name}">&#10003;</button>
+                        </div>`;
+                    } else {
+                        indentedListHtml = `<span class="fit-item-problem-tag">(Wrong Item)</span>`;
+                    }
+                }
+
+                html += buttonsHtml;
+                html += indentedListHtml;
+                // --- END NEW FC PART ---
+
+                html += '</li>';
+            });
+            html += '</ul></div>'; // Close bank
+        });
+
+        // --- NEW: Show "Missing Items" Bank ---
+        if (data.missing_items && data.missing_items.length > 0) {
+            html += '<div class="fit-slot-bank">';
+            html += '<div class="fit-slot-bank-header" style="color: #ff8a8a;">Missing Items</div>'; // Red header
+            html += '<ul class="fit-slot-list">';
+            data.missing_items.forEach(item => {
+                html += `<li class="fit-slot-item" title="${item.name}" style="color: #ff8a8a;">`; // Red text
+                html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
+                html += `<span class="fit-item-name">${item.name} (x${item.quantity})</span>`;
+                html += '</li>';
+            });
+            html += '</ul></div>';
+        }
+        // --- END MISSING ITEMS ---
+
+        html += '</div>'; // Close slot-banks
+        html += '</div>'; // Close fit-modal-layout
+        return html;
+    }
+    // ---
+    // --- END NEW HTML Builder
+    // ---
+
+
     function openFitModal(fitId) {
         if (!fitModalOverlay) return;
 
@@ -556,144 +699,17 @@ It will be filled by the partial template on page load.
             })
             .then(data => {
                 // --- MODIFICATION: Handle new JSON structure ---
-                // data = { full_fit_with_status: [], missing_items: [], doctrine_name: "..." }
+                // data = { status: "success", name: "...", slotted_fit: {...}, missing_items: [] }
 
-                fitModalTitle.textContent = `Fit vs. ${data.doctrine_name}`;
-
-                let html = '<div class="fit-modal-sub-container">';
-
-                // --- BUILD THE NEW "SUBMITTED FIT" LIST ---
-                html += '<div>';
-                html += '<h3 class="fit-modal-sub-header">Submitted Fit</h3>';
-                html += '<ul class="fit-detail-list">';
-
-                // --- THIS IS THE FIX ---
-                // Check if data is an error OR if the fit list is missing/empty
-                if (data.status === 'error' || !data.full_fit_with_status || data.full_fit_with_status.length === 0) {
-                    // If data.status is 'error', show the error message
-                    if (data.status === 'error') {
-                        html += `<li style="color: #ff8a8a; white-space: normal;">Error loading fit: ${data.message}</li>`;
-                    } else {
-                        // Otherwise, just show "Fit is empty"
-                        html += '<li style="color: #999; font-style: italic;">Fit is empty.</li>';
-                    }
-                // --- END THE FIX ---
-                } else {
-
-                    let isEven = false; // <-- 1. Initialize even/odd tracker
-                    let isFirstItem = true; // <-- NEW: Tracker for ship hull
-
-                    data.full_fit_with_status.forEach(item => {
-                        const itemKey = String(item.type_id || item.raw_line);
-                        let itemClass = '';
-                        let indentedListHtml = '';
-                        let buttonsHtml = '';
-
-                        // --- MODIFICATION: Also treat [Empty...] lines as spacers ---
-                        if (item.name === "BLANK_LINE" || (item.name && item.name.startsWith('[Empty'))) {
-                        // --- END MODIFICATION ---
-                            html += `<li class="fit-item-blank-line"></li>`;
-                            isEven = false; // <-- 2. Reset tracker on spacer
-                            isFirstItem = false; // No longer first item
-                            return; // 'continue' in a forEach
-                        }
-
-                        // --- MODIFIED: Use switch statement for new status ---
-                        switch (item.status) {
-                            case 'accepted_sub':
-                                itemClass = 'fit-item-accepted-sub'; // Green
-                                if (item.substitutes_for && item.substitutes_for.length > 0) {
-                                    indentedListHtml = '<ul class="fit-item-sub-for-list">'; // Green dashed border
-                                    item.substitutes_for.forEach(match => {
-                                        indentedListHtml += `<li class="fit-item-sub-for-item">`;
-                                        indentedListHtml += `<img src="${match.icon_url}" alt="${match.name}">`;
-                                        indentedListHtml += `<span>Substitutes for: ${match.name} (x${match.quantity})</span>`;
-                                        indentedListHtml += `</li>`;
-                                    });
-                                    indentedListHtml += '</ul>';
-                                }
-                                break;
-
-                            case 'problem':
-                                itemClass = 'fit-item-problem'; // Yellow
-                                if (item.potential_matches && item.potential_matches.length > 0) {
-                                    indentedListHtml = '<ul class="fit-item-missing-list">'; // Yellow dashed border
-                                    item.potential_matches.forEach(match => {
-                                        indentedListHtml += `<li class="fit-item-missing-item">`;
-                                        indentedListHtml += `<img src="${match.icon_url}" alt="${match.name}">`;
-                                        indentedListHtml += `<span>Missing: ${match.name} (x${match.quantity})</span>`;
-                                        indentedListHtml += `</li>`;
-                                    });
-                                    indentedListHtml += '</ul>';
-
-                                    // --- MODIFIED: Only show accept button ---
-                                    const match = item.potential_matches[0]; // Assume 1:1
-                                    // --- THIS IS THE FIX: Removed whitespace inside button ---
-                                    buttonsHtml = `<div class="sub-action-buttons">
-                                        <button class="fc-btn btn-approve js-sub-accept"
-                                            data-problem-item-id="${item.type_id}"
-                                            data-problem-item-name="${item.name}"
-                                            data-missing-item-id="${match.type_id}"
-                                            data-missing-item-name="${match.name}"
-                                            title="Accept ${item.name} as substitute for ${match.name}">&#10003;</button>
-                                    </div>`;
-                                    // --- END THE FIX ---
-                                } else {
-                                    // Problem item with no potential matches
-                                    indentedListHtml = `<span class="fit-item-problem-tag">(Wrong Item)</span>`;
-                                }
-                                break;
-
-                            case 'doctrine':
-                            default:
-                                itemClass = ''; // Standard item
-                                break;
-                        }
-
-                        // <-- 3. Apply 'even' class if needed
-                        const evenClass = isEven ? 'fit-item-even' : '';
-                        if (evenClass) {
-                            itemClass += ` ${evenClass}`; // Add to existing classes
-                        }
-
-                        html += `<li class="${itemClass}" title="${item.name}" data-item-type-id="${itemKey}">`;
-
-                        // Logic for icon
-                        if (item.icon_url) {
-                            html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
-                        } else if (item.type_id) {
-                             html += `<img src="https://images.evetech.net/types/${item.type_id}/icon?size=32" alt="${item.name}" class="fit-modal-icon" onerror="this.style.display='none'">`;
-                        } else {
-                            html += '<div class="fit-modal-icon-placeholder"></div>';
-                        }
-
-                        // Display the raw line
-                        if (item.raw_line) {
-                             const safe_line = item.raw_line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                             html += `<span>${safe_line}</span>`;
-                        } else {
-                             html += `<span>${item.name}${item.quantity > 1 ? ' x' + item.quantity : ''}</span>`;
-                        }
-
-                        // Add buttons and indented list
-                        html += buttonsHtml;
-                        html += indentedListHtml;
-
-                        html += '</li>';
-
-                        // --- FIX: Don't toggle on the first (ship) line ---
-                        if (isFirstItem) {
-                            isFirstItem = false; // Ship line is done
-                        } else {
-                            isEven = !isEven; // <-- 4. Toggle for next item
-                        }
-                    });
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Failed to load fit.');
                 }
-                html += '</ul></div>';
 
-                html += '</div>'; // Close .fit-modal-sub-container
+                fitModalTitle.textContent = data.name;
 
-                fitModalBody.innerHTML = html;
+                // --- MODIFIED: Use new complex HTML builder ---
+                fitModalBody.innerHTML = buildSlottedFitHtml(data);
+                // --- END MODIFICATION ---
 
                 // --- MODIFIED: Add event listeners for the new buttons ---
                 fitModalBody.querySelectorAll('.js-sub-accept').forEach(button => {

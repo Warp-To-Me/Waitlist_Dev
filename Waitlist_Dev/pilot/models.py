@@ -31,6 +31,29 @@ class EveType(models.Model):
     icon_url = models.CharField(max_length=255, null=True, blank=True, help_text="URL for the item's icon")
     # --- END ADDITION ---
 
+    # ---
+    # --- NEW FIELDS FOR SHIP SLOTS (Dogma Attrs 12, 13, 14, 1137, 1367) ---
+    # ---
+    hi_slots = models.IntegerField(null=True, blank=True, help_text="Ship: High slots")
+    med_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Medium slots")
+    low_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Low slots")
+    rig_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Rig slots")
+    subsystem_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Subsystem slots")
+    # ---
+    # --- NEW FIELD FOR MODULE/ITEM SLOT TYPE (Dogma Attrs 125, 126, 127, 1154, 1373) ---
+    # ---
+    slot_type = models.CharField(
+        max_length=10, 
+        null=True, 
+        blank=True, 
+        db_index=True, 
+        help_text="Module: 'high', 'mid', 'low', 'rig', 'subsystem', or 'drone'"
+    )
+    # ---
+    # --- END NEW FIELDS
+    # ---
+
+
     def __str__(self):
         return self.name
 # --- END NEW MODELS ---

@@ -44,13 +44,27 @@ def get_or_cache_eve_group(group_id):
         print(f"Error in get_or_cache_eve_group({group_id}): {e}")
         return None
 
+# ---
+# --- NEW HELPER: Parse Dogma Attributes
+# ---
+def _get_dogma_value(dogma_attributes, attribute_id):
+    """Safely find a dogma attribute value from the list."""
+    if not dogma_attributes:
+        return None
+    for attr in dogma_attributes:
+        if attr['attribute_id'] == attribute_id:
+            return attr.get('value')
+    return None
+# ---
+# --- END NEW HELPER
+# ---
 
 def get_or_cache_eve_type(item_name):
     """
     Tries to get an EveType (ship, module, ammo) from the local DB by name.
     If not found, searches ESI, fetches details, and caches it.
     
-    --- MODIFIED to use get_or_create to prevent race conditions ---
+    --- MODIFIED to use get_or_create and cache slot info ---
     """
     try:
         # First, try to get by name. This is fast and hits the cache.
@@ -103,11 +117,38 @@ def get_or_cache_eve_type(item_name):
                     
                 # 5. Get slot (if any)
                 slot = None
-                if 'dogma_attributes' in type_data:
-                    for attr in type_data['dogma_attributes']:
-                        if attr['attribute_id'] == 300: 
-                            slot = int(attr['value'])
-                            break
+                # ---
+                # --- MODIFIED: Cache all slot and module info ---
+                # ---
+                dogma_attrs = type_data.get('dogma_attributes', [])
+                
+                # 5a. Get implant slot (if applicable)
+                slot = _get_dogma_value(dogma_attrs, 300) # 300 is 'implantSlot'
+                
+                # 5b. Get ship slot counts (if applicable)
+                hi_slots = _get_dogma_value(dogma_attrs, 14)
+                med_slots = _get_dogma_value(dogma_attrs, 13)
+                low_slots = _get_dogma_value(dogma_attrs, 12)
+                rig_slots = _get_dogma_value(dogma_attrs, 1137)
+                subsystem_slots = _get_dogma_value(dogma_attrs, 1367)
+
+                # 5c. Get module slot type (if applicable)
+                slot_type = None
+                if group.category_id == 18: # Category 18 is Drone
+                    slot_type = 'drone'
+                elif _get_dogma_value(dogma_attrs, 125) == 1: # hiSlot
+                    slot_type = 'high'
+                elif _get_dogma_value(dogma_attrs, 126) == 1: # medSlot
+                    slot_type = 'mid'
+                elif _get_dogma_value(dogma_attrs, 127) == 1: # lowSlot
+                    slot_type = 'low'
+                elif _get_dogma_value(dogma_attrs, 1154) == 1: # rigSlot
+                    slot_type = 'rig'
+                elif _get_dogma_value(dogma_attrs, 1373) == 1: # subSystem
+                    slot_type = 'subsystem'
+                # ---
+                # --- END MODIFICATION
+                # ---
                 
                 # 6. Construct the icon URL
                 icon_url = f"https://images.evetech.net/types/{type_id}/icon?size=32"
@@ -117,6 +158,16 @@ def get_or_cache_eve_type(item_name):
                 type_obj.group = group
                 type_obj.slot = slot
                 type_obj.icon_url = icon_url
+                
+                # --- NEW: Save slot data ---
+                type_obj.hi_slots = hi_slots
+                type_obj.med_slots = med_slots
+                type_obj.low_slots = low_slots
+                type_obj.rig_slots = rig_slots
+                type_obj.subsystem_slots = subsystem_slots
+                type_obj.slot_type = slot_type
+                # --- END NEW ---
+                
                 type_obj.save()
             
             return type_obj
@@ -136,6 +187,8 @@ def get_or_cache_eve_type_by_id(type_id):
     Tries to get an EveType from the local DB by its ID.
     If not found, fetches from ESI and caches it.
     This is used by the backfill script.
+    
+    --- MODIFIED to cache slot info ---
     """
     if not type_id:
         return None
@@ -157,13 +210,38 @@ def get_or_cache_eve_type_by_id(type_id):
                 # This should be rare, but if group fetch fails, we can't proceed
                 raise Exception(f"Failed to fetch group {type_data['group_id']} for type {type_id}")
                 
-            # 4. Get slot (if any)
-            slot = None
-            if 'dogma_attributes' in type_data:
-                for attr in type_data['dogma_attributes']:
-                    if attr['attribute_id'] == 300: # 300 is 'implantSlot'
-                        slot = int(attr['value'])
-                        break
+            # ---
+            # --- MODIFIED: Cache all slot and module info ---
+            # ---
+            dogma_attrs = type_data.get('dogma_attributes', [])
+            
+            # 4a. Get implant slot (if applicable)
+            slot = _get_dogma_value(dogma_attrs, 300) # 300 is 'implantSlot'
+            
+            # 4b. Get ship slot counts (if applicable)
+            hi_slots = _get_dogma_value(dogma_attrs, 14)
+            med_slots = _get_dogma_value(dogma_attrs, 13)
+            low_slots = _get_dogma_value(dogma_attrs, 12)
+            rig_slots = _get_dogma_value(dogma_attrs, 1137)
+            subsystem_slots = _get_dogma_value(dogma_attrs, 1367)
+
+            # 4c. Get module slot type (if applicable)
+            slot_type = None
+            if group.category_id == 18: # Category 18 is Drone
+                slot_type = 'drone'
+            elif _get_dogma_value(dogma_attrs, 125) == 1: # hiSlot
+                slot_type = 'high'
+            elif _get_dogma_value(dogma_attrs, 126) == 1: # medSlot
+                slot_type = 'mid'
+            elif _get_dogma_value(dogma_attrs, 127) == 1: # lowSlot
+                slot_type = 'low'
+            elif _get_dogma_value(dogma_attrs, 1154) == 1: # rigSlot
+                slot_type = 'rig'
+            elif _get_dogma_value(dogma_attrs, 1373) == 1: # subSystem
+                slot_type = 'subsystem'
+            # ---
+            # --- END MODIFICATION
+            # ---
             
             # 5. Construct the icon URL
             icon_url = f"https://images.evetech.net/types/{type_id}/icon?size=32"
@@ -174,7 +252,15 @@ def get_or_cache_eve_type_by_id(type_id):
                 name=type_data['name'],
                 group=group,
                 slot=slot,
-                icon_url=icon_url
+                icon_url=icon_url,
+                # --- NEW: Save slot data ---
+                hi_slots=hi_slots,
+                med_slots=med_slots,
+                low_slots=low_slots,
+                rig_slots=rig_slots,
+                subsystem_slots=subsystem_slots,
+                slot_type=slot_type
+                # --- END NEW ---
             )
             return new_type
             

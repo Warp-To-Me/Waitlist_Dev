@@ -229,10 +229,10 @@
         }
 
         /* --- NEW: Fit Detail Modal Width --- */
-        /* Make the fit detail modal narrower */
+        /* Make the fit detail modal wider */
         #fit-detail-modal-overlay .modal-content,
-        #doctrine-fit-modal-overlay .modal-content { /* --- ADDED Doctrine Modal --- */
-            max-width: 700px; 
+        #doctrine-fit-modal-overlay .modal-content {
+            max-width: 800px; /* MODIFIED: Widen to 800px */
         }
 
         .modal-header {
@@ -401,77 +401,143 @@
             text-overflow: ellipsis;
         }
 
-        /* --- NEW: Fit Detail List (FC Modal) --- */
-        .fit-detail-list {
+        /* ---
+        --- NEW SLOTTED FIT MODAL STYLES (REPLACES .fit-detail-list)
+        --- */
+        .fit-modal-layout {
+            display: grid;
+            grid-template-columns: 200px 1fr; /* Ship render on left, slots on right */
+            gap: 15px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .fit-modal-layout {
+                grid-template-columns: 1fr; /* Stack on mobile */
+            }
+        }
+
+        .fit-modal-ship-render {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #222;
+            border-radius: 8px;
+            align-self: start; /* Don't stretch */
+        }
+
+            .fit-modal-ship-render img {
+                width: 128px;
+                height: 128px;
+            }
+
+            .fit-modal-ship-render span {
+                font-weight: 600;
+                font-size: 1.1em;
+                color: #fff;
+                text-align: center;
+            }
+
+        .fit-modal-slot-banks {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0; /* Allow flex shrinking */
+        }
+
+        .fit-slot-bank {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .fit-slot-bank-header {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #ccc;
+            padding-bottom: 4px;
+            border-bottom: 0px solid #444;
+        }
+
+            .fit-slot-bank-header span {
+                font-size: 0.9em;
+                color: #888;
+                font-weight: normal;
+            }
+
+        .fit-slot-list {
             list-style: none;
-            padding: 10px; 
+            padding: 0;
             margin: 0;
             display: flex;
             flex-direction: column;
             gap: 2px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.85em; 
         }
 
-            .fit-detail-list li {
-                display: flex;
-                align-items: center;
-                gap: 5px; 
-                padding: 2px 5px; 
-                border-radius: 4px;
-                white-space: pre; /* Keep whitespace */
-                transition: background-color 0.3s ease, color 0.3s ease; /* Added transition */
+        .fit-slot-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            white-space: pre; /* Keep whitespace */
+            transition: background-color 0.3s ease, color 0.3s ease;
+            position: relative; /* For sub-buttons */
+            min-height: 28px; /* Ensure consistent height */
+            box-sizing: border-box;
+        }
+            /* Alternating stripes */
+            .fit-slot-item:nth-child(even) {
+                background: #333;
             }
 
-                /* --- MODIFICATION: Remove CSS-based striping --- */
-                /*
-                .fit-detail-list li:nth-child(even) {
-                    background: #333;
-                }
-                */
-
-                /* --- NEW: Add JS-based striping class --- */
-                .fit-detail-list li.fit-item-even {
-                    background: #333;
-                }
-
-                .fit-detail-list li:first-child {
-                    font-weight: bold;
-                    color: #fff;
-                    background: #3a3a3a;
-                }
-
-            /* --- NEW: Style for blank line spacer --- */
-            .fit-detail-list li.fit-item-blank-line {
-                height: 10px; /* Increase height slightly */
-                padding: 0;
-                background: none;
-                /* --- MODIFICATION: Remove the visible line --- */
-                border-top: none; /* <-- REMOVED THE DASHED LINE */
-                margin-top: 5px; /* Add some space above the line */
+            .fit-slot-item.is-empty {
+                color: #777;
+                font-style: italic;
             }
-            /* --- END NEW --- */
 
-            /* --- NEW: Highlighting for problem items --- */
-            .fit-detail-list li.fit-item-problem {
+            .fit-slot-item img {
+                width: 24px;
+                height: 24px;
+                flex-shrink: 0;
+            }
+
+            .fit-slot-item .fit-item-name {
+                flex-grow: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            /* ---
+        --- END NEW SLOTTED FIT STYLES
+        --- */
+
+
+            /* ---
+        --- MODIFIED: STYLES FOR COMPARISON (FC MODAL)
+        --- These now apply to .fit-slot-item instead of .fit-detail-list li
+        --- */
+
+            /* Highlighting for problem items */
+            .fit-slot-item.fit-item-problem {
                 background-color: #5d3a00; /* Dark orange background */
                 color: #ffc107; /* Yellow text */
                 flex-wrap: wrap;
-                /* --- NEW: For absolute positioning of sub buttons --- */
-                position: relative;
-                /* --- MODIFIED: Padding for just one button --- */
-                padding-right: 40px;
+                padding-right: 40px; /* Space for button */
             }
 
-            /* --- NEW: Highlighting for accepted sub items --- */
-            .fit-detail-list li.fit-item-accepted-sub {
+            /* Highlighting for accepted sub items */
+            .fit-slot-item.fit-item-accepted-sub {
                 background-color: #1c4a24; /* Dark green background */
                 color: #63d471; /* Bright green text */
                 flex-wrap: wrap;
-                position: relative;
             }
 
-        /* --- NEW: Substitution Action Buttons --- */
+        /* Substitution Action Buttons (Same as before) */
         .sub-action-buttons {
             position: absolute;
             top: 50%;
@@ -492,7 +558,6 @@
                 align-items: center;
                 justify-content: center;
             }
-        /* --- END NEW --- */
 
         .fit-item-problem-tag {
             font-weight: bold;
@@ -500,13 +565,12 @@
             color: #ffc107;
             margin-left: 10px;
         }
-        /* --- END NEW --- */
 
-        /* --- NEW: Styles for indented missing item list --- */
+        /* Styles for indented missing item list */
         .fit-item-missing-list {
             list-style: none;
-            padding: 4px 0 4px 29px; 
-            margin: 4px 0 0 0; 
+            padding: 4px 0 4px 29px;
+            margin: 4px 0 0 0;
             width: 100%; /* Make it span full width */
             display: flex;
             flex-direction: column;
@@ -526,11 +590,11 @@
                 height: 20px;
             }
 
-        /* --- NEW: Styles for indented "Substitutes For" list --- */
+        /* Styles for indented "Substitutes For" list */
         .fit-item-sub-for-list {
             list-style: none;
-            padding: 4px 0 4px 29px; 
-            margin: 4px 0 0 0; 
+            padding: 4px 0 4px 29px;
+            margin: 4px 0 0 0;
             width: 100%;
             display: flex;
             flex-direction: column;
@@ -549,131 +613,21 @@
                 width: 20px;
                 height: 20px;
             }
-        /* --- END NEW --- */
 
-        .fit-modal-icon {
-            width: 24px;
-            height: 24px;
-            flex-shrink: 0;
-        }
+        /* ---
+        --- END MODIFIED COMPARISON STYLES
+        --- */
 
-        .fit-modal-icon-placeholder {
-            width: 24px;
-            height: 24px;
-            flex-shrink: 0;
-        }
-        /* --- END NEW FIT DETAIL LIST --- */
+
+        /* ---
+        --- REMOVED: Old .fit-detail-list styles
+        --- */
 
         /* --- NEW: FIT MODAL SUBSTITUTION STYLES --- */
-        .fit-modal-sub-container {
-            padding: 10px 15px 15px 15px;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 15px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-        }
+        /* --- These are for the *old* modal, which is now gone --- */
+        /* --- We can REMOVE them --- */
 
-        /* --- MODIFICATION: REMOVED two-column grid layout --- */
-        @media (min-width: 768px) {
-            #fit-detail-modal-overlay .modal-content {
-                max-width: 700px; /* Widen the fit modal for the single list */
-            }
-
-            /*
-            .fit-modal-sub-container {
-                grid-template-columns: 1fr 1fr;
-            }
-            */
-        }
-        /* --- END MODIFICATION --- */
-
-
-        .fit-modal-sub-header {
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #fff;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
-            border-bottom: 0px solid #555;
-        }
-
-        .header-problem {
-            color: #ffc107; /* Yellow */
-        }
-
-        .header-missing {
-            color: #dc3545; /* Red */
-        }
-
-        .fit-modal-sub-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .fit-modal-sub-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 6px;
-            border-radius: 4px;
-            background: #333;
-        }
-
-            .fit-modal-sub-item img {
-                width: 24px;
-                height: 24px;
-                flex-shrink: 0;
-            }
-
-            .fit-modal-sub-item span {
-                /* For item name */
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                flex-grow: 1;
-            }
-
-        .btn-make-sub {
-            background-color: #3b5998;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 0.8em;
-            font-weight: bold;
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: background-color 0.2s;
-        }
-
-            .btn-make-sub:hover {
-                background-color: #4e71bb;
-            }
-
-            .btn-make-sub:disabled {
-                background-color: #555;
-                opacity: 0.7;
-                cursor: not-allowed;
-            }
-
-        /* This is the dropdown that appears */
-        .sub-dropdown-select {
-            display: block;
-            width: 100%;
-            background: #222;
-            color: #fff;
-            border: 0px solid #555;
-            border-radius: 4px;
-            padding: 5px;
-            margin-top: 5px;
-        }
-
-        /* --- END SUBSTITUTION STYLES --- */
+        /* --- REMOVED: .fit-modal-sub-container and related styles --- */
 
 
         .modal-footer {
@@ -811,7 +765,6 @@
         </a>
         {% endif %}
         <!-- --- END FC ADMIN LINKS --- -->
-
         <!-- --- MOVED: X-Up button is now on the left --- -->
         <!-- This button will be enabled/disabled by the waitlist_view.html template -->
         <button type="button"
@@ -822,7 +775,6 @@
             X-Up
         </button>
         <!-- --- END MOVE --- -->
-
         <!-- The Profile button, its href will be updated by JS -->
         <a href="{% if main_char %}{% url 'pilot:pilot_detail' main_char.character_id %}{% endif %}"
            id="profile-link"
@@ -871,7 +823,6 @@
         {% block content %}{% endblock %}
     </main>
     <!-- --- END MAIN CONTENT BLOCK --- -->
-
     <!-- --- NEW: X-UP MODAL HTML --- -->
     {% if user.is_authenticated %}
     <div class="modal-overlay" id="xup-modal-overlay">
@@ -916,7 +867,6 @@
     </div>
     {% endif %}
     <!-- --- END NEW MODAL --- -->
-
     <!-- --- NEW: FC FIT DETAIL MODAL --- -->
     {% if is_fc %}
     <div class="modal-overlay" id="fit-detail-modal-overlay">
@@ -944,8 +894,6 @@
     </div>
     {% endif %}
     <!-- --- END NEW FC MODAL --- -->
-
-
     <!-- ---
     --- NEW: DOCTRINE FIT MODAL (for public fittings page)
     ---
@@ -978,7 +926,6 @@
     --- END NEW DOCTRINE FIT MODAL
     ---
     -->
-
     <!--
     ---
     --- NEW: CUSTOM CONFIRM MODAL (MOVED FROM waitlist_view.html) ---
@@ -1002,8 +949,6 @@
         </div>
     </div>
     <!-- --- END NEW: CUSTOM CONFIRM MODAL --- -->
-
-
     <!-- --- SHARED JAVASCRIPT --- -->
     <script>
         const dropdownToggleButton = document.getElementById('dropdown-toggle-button');
@@ -1270,6 +1215,93 @@
             const copyBtn = document.getElementById('doctrine-fit-modal-copy-btn');
             const copyTextarea = document.getElementById('doctrine-fit-copy-textarea');
 
+            // ---
+            // --- NEW: HTML Builder Function for Slotted Fits
+            // ---
+            function buildSlottedFitHtml(data) {
+                const fit = data.slotted_fit;
+                if (!fit || !fit.ship || !fit.slots) {
+                    return '<p style="color: #ff8a8a; padding: 20px;">Error: Invalid fit data received.</p>';
+                }
+
+                let html = '<div class="fit-modal-layout">';
+
+                // --- 1. Ship Render Column ---
+                html += `<div class="fit-modal-ship-render">
+                            <img src="${fit.ship.icon_url}" alt="${fit.ship.name}">
+                            <span>${fit.ship.name}</span>
+                         </div>`;
+
+                // --- 2. Slot Banks Column ---
+                html += '<div class="fit-modal-slot-banks">';
+
+                const slotOrder = ['high', 'mid', 'low', 'rig', 'subsystem', 'drone', 'cargo'];
+                const slotNames = {
+                    high: 'High Slots', mid: 'Mid Slots', low: 'Low Slots',
+                    rig: 'Rig Slots', subsystem: 'Subsystem Slots',
+                    drone: 'Drones', cargo: 'Cargo Hold'
+                };
+
+                slotOrder.forEach(slotKey => {
+                    const items = fit.slots[slotKey];
+                    const count = fit.slot_counts[slotKey] || 0;
+
+                    if (!items || items.length === 0) {
+                        return; // Don't render empty sections
+                    }
+
+                    // Build header (e.g., "High Slots (8)")
+                    html += '<div class="fit-slot-bank">';
+                    html += '<div class="fit-slot-bank-header">';
+                    html += `${slotNames[slotKey]} `;
+                    // Show (x/y) count only for non-T3C, non-drone/cargo slots
+                    if (!fit.is_t3c && slotKey !== 'drone' && slotKey !== 'cargo') {
+                         const fitted_count = items.filter(i => !i.is_empty).length;
+                         html += `<span>(${fitted_count} / ${count})</span>`;
+                    }
+                    html += '</div>';
+
+                    // Build item list
+                    html += '<ul class="fit-slot-list">';
+                    items.forEach(item => {
+                        let itemClass = item.is_empty ? 'is-empty' : '';
+
+                        // --- This is for the FC modal, but we add it here
+                        // --- so the simple builder can ignore it.
+                        if (item.status) {
+                            itemClass += ` ${item.status}`;
+                        }
+
+                        html += `<li class="fit-slot-item ${itemClass}" title="${item.name}">`;
+
+                        if (item.is_empty) {
+                            html += `<img src="https://images.evetech.net/types/2965/icon?size=32" alt="Empty Slot" class="fit-modal-icon" style="opacity: 0.2;">`; // Placeholder icon
+                            html += `<span class="fit-item-name">${item.name}</span>`;
+                        } else {
+                            html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
+                            // Use raw_line for accurate text, fallback to name
+                            const line_text = item.raw_line || item.name;
+                            const safe_line = line_text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            html += `<span class="fit-item-name">${safe_line}</span>`;
+                        }
+
+                        // --- Logic for FC modal comparison (ignored by simple modal) ---
+                        // (This will be built by the more complex function in waitlist_view.html)
+
+                        html += '</li>';
+                    });
+                    html += '</ul></div>'; // Close bank
+                });
+
+                html += '</div>'; // Close slot-banks
+                html += '</div>'; // Close fit-modal-layout
+                return html;
+            }
+            // ---
+            // --- END NEW HTML Builder
+            // ---
+
+
             // This function will be attached to buttons in fittings_view.html
             // We make it global so it can be accessed from the other template.
             window.openDoctrineFitModal = (fitId) => {
@@ -1293,54 +1325,9 @@
                         // 3. Populate modal content
                         modalTitle.textContent = data.name;
 
-                        // 4. Build the HTML list for the fit
-                        let html = '<ul class="fit-detail-list">';
-                        if (data.parsed_list && data.parsed_list.length > 0) {
-                            
-                            let isEven = false; // <-- 1. Initialize even/odd tracker
-                            let isFirstItem = true; // <-- NEW: Tracker for ship hull
-
-                            data.parsed_list.forEach(item => {
-                                // --- MODIFICATION: Also treat [Empty...] lines as spacers ---
-                                if (item.name === "BLANK_LINE" || (item.name && item.name.startsWith('[Empty'))) {
-                                // --- END MODIFICATION ---
-                                    html += `<li class="fit-item-blank-line"></li>`;
-                                    isEven = false; // <-- 2. Reset tracker on spacer
-                                    isFirstItem = false; // No longer first item
-                                    return; // 'continue' in a forEach
-                                }
-
-                                // <-- 3. Apply 'even' class if needed
-                                const evenClass = isEven ? 'fit-item-even' : '';
-                                html += `<li title="${item.name}" class="${evenClass}">`;
-                                
-                                // Logic for icon
-                                if (item.icon_url) {
-                                    html += `<img src="${item.icon_url}" alt="${item.name}" class="fit-modal-icon">`;
-                                } else if (item.type_id) {
-                                    html += `<img src="https://images.evetech.net/types/${item.type_id}/icon?size=32" alt="${item.name}" class="fit-modal-icon" onerror="this.style.display='none'">`;
-                                } else {
-                                    html += '<div class="fit-modal-icon-placeholder"></div>';
-                                }
-
-                                // Display the raw line
-                                const safe_line = item.raw_line.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                                html += `<span>${safe_line}</span>`;
-                                html += '</li>';
-
-                                // --- FIX: Don't toggle on the first (ship) line ---
-                                if (isFirstItem) {
-                                    isFirstItem = false; // Ship line is done
-                                } else {
-                                    isEven = !isEven; // <-- 4. Toggle for next item
-                                }
-                            });
-                        } else {
-                            html += '<li>Fit data is missing.</li>';
-                        }
-                        html += '</ul>';
-
-                        modalBody.innerHTML = html;
+                        // 4. --- MODIFIED: Use new HTML builder ---
+                        modalBody.innerHTML = buildSlottedFitHtml(data);
+                        // --- END MODIFICATION ---
 
                         // 5. Populate hidden textarea for copying
                         copyTextarea.value = data.raw_eft;
