@@ -20,6 +20,16 @@ from esi.clients import EsiClientProvider
 from bravado.exception import HTTPNotFound
 # --- END NEW ---
 
+# ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
 
 try:
     # Import the real callback view from the esi library
@@ -55,6 +65,7 @@ def esi_login(request):
             'state': state
         }
     )
+    logger.debug(f"SSO state created/updated for session {request.session.session_key}")
 
     # 5. Build the EVE SSO redirect URL
     authorize_url = "https://login.eveonline.com/v2/oauth/authorize/"
@@ -66,9 +77,11 @@ def esi_login(request):
     if scope_type == 'fc':
         # User is requesting FC scopes
         scopes_to_request = settings.ESI_SSO_SCOPES_FC
+        logger.debug(f"Requesting FC scopes for session {request.session.session_key}")
     else:
         # Default to regular scopes
         scopes_to_request = settings.ESI_SSO_SCOPES_REGULAR
+        logger.debug(f"Requesting REGULAR scopes for session {request.session.session_key}")
     # --- END FIX ---
 
     params = {
@@ -80,6 +93,7 @@ def esi_login(request):
     }
     
     # 6. Redirect the user to EVE's login page
+    logger.info(f"Redirecting session {request.session.session_key} to EVE SSO")
     return redirect(f"{authorize_url}?{urlencode(params)}")
 
 
@@ -90,6 +104,7 @@ def sso_complete_login(request):
     Handles the final step of logging the user into Django.
     The 'esi_callback' (Step 2) view redirects here.
     """
+    logger.debug(f"SSO Step 3: Completing login for session {request.session.session_key}")
     try:
         # 1. Find the CallbackRedirect object for this session.
         #    The 'esi_callback' view has already used it and
@@ -100,6 +115,7 @@ def sso_complete_login(request):
     except CallbackRedirect.DoesNotExist:
         # This shouldn't happen, but if it does, send to homepage.
         # --- MODIFIED ---
+        logger.warning(f"SSO Step 3: No CallbackRedirect found for session {request.session.session_key}")
         return redirect('waitlist:home')
 
     # 2. Get the ESI token from the object.
@@ -108,11 +124,13 @@ def sso_complete_login(request):
         # Callback happened but didn't result in a token.
         callback_redirect.delete() # Clean up the failed redirect
         # --- MODIFIED ---
+        logger.warning(f"SSO Step 3: CallbackRedirect found but has no token. Deleting.")
         return redirect('waitlist:home')
         
     # --- THIS IS THE FIX (Part 2) ---
     # The 'esi_token' is the NEW token. We must delete all
     # old tokens for this character to prevent duplicates.
+    logger.debug(f"SSO Step 3: Pruning old tokens for char {esi_token.character_id}")
     Token.objects.filter(
         character_id=esi_token.character_id
     ).exclude(pk=esi_token.pk).delete()
@@ -128,12 +146,14 @@ def sso_complete_login(request):
     except AttributeError:
         # This will fail if the token model fields are named differently.
         # If so, we can't log in, so just clean up and go home.
+        logger.error(f"SSO Step 3: ESI token object is missing character_id or character_name fields. Token PK: {esi_token.pk}")
         callback_redirect.delete()
         # --- MODIFIED ---
         return redirect('waitlist:home')
         
     if not char_id or not char_name:
         # Token is missing key info
+        logger.error(f"SSO Step 3: ESI token has null char_id or char_name. Token PK: {esi_token.pk}")
         callback_redirect.delete()
         # --- MODIFIED ---
         return redirect('waitlist:home')
@@ -152,6 +172,7 @@ def sso_complete_login(request):
     # --- NEW: Helper function to get public corp/alliance data ---
     def get_public_character_data(character_id):
         try:
+            logger.debug(f"SSO Step 3: Getting public data for char {character_id}")
             public_data = esi.client.Character.get_characters_character_id(
                 character_id=character_id
             ).results()
@@ -174,6 +195,7 @@ def sso_complete_login(request):
                     ).results()
                     alliance_name = alliance_data.get('name')
                 except HTTPNotFound:
+                    logger.warning(f"SSO Step 3: Could not find alliance {alliance_id} (dead alliance?)")
                     alliance_name = "N/A" # Handle dead alliances
 
             return {
@@ -183,7 +205,7 @@ def sso_complete_login(request):
                 "alliance_name": alliance_name,
             }
         except Exception as e:
-            print(f"Error fetching public data for {character_id}: {e}")
+            logger.error(f"Error fetching public data for {character_id}: {e}", exc_info=True)
             return {} # Return empty dict on failure
     # --- END NEW HELPER ---
     
@@ -196,6 +218,7 @@ def sso_complete_login(request):
     if user_was_authenticated:
         # CASE 1: USER IS ALREADY LOGGED IN (Adding an Alt)
         user_account = request.user
+        logger.info(f"SSO Step 3: Attaching alt {char_name} ({char_id}) to existing user {user_account.username}")
     else:
         # CASE 2: USER IS NOT LOGGED IN
         
@@ -204,6 +227,7 @@ def sso_complete_login(request):
             existing_char = EveCharacter.objects.get(character_id=char_id)
             # If found, log in as that character's user
             user_account = existing_char.user
+            logger.info(f"SSO Step 3: Found existing char {char_name} ({char_id}), logging in as user {user_account.username}")
         except EveCharacter.DoesNotExist:
             # Not found, so this is a NEW user
             user_account, created = User.objects.get_or_create(
@@ -217,9 +241,11 @@ def sso_complete_login(request):
                 user_account.save() # Save the name change
 
             if created:
+                logger.info(f"SSO Step 3: Created new user {user_account.username} for char {char_name} ({char_id})")
                 user_account.is_active = True
                 # If this is the very first user, make them an admin
                 if User.objects.count() == 1:
+                    logger.warning(f"SSO Step 3: First user created ({user_account.username}), granting superuser status.")
                     user_account.is_staff = True
                     user_account.is_superuser = True
                 user_account.save() # Save the new user (with flags)
@@ -257,6 +283,7 @@ def sso_complete_login(request):
     
     if not char_created:
         # Character record already existed
+        logger.debug(f"SSO Step 3: EveCharacter {char_id} already exists, updating token and public data")
         
         # --- NEW: Update token and public data ---
         eve_char.access_token = esi_token.access_token
@@ -270,6 +297,7 @@ def sso_complete_login(request):
         
         # This handles re-linking a character to a different account if needed
         if eve_char.user != user_account:
+            logger.warning(f"SSO Step 3: Re-linking char {char_id} from user {eve_char.user.username} to {user_account.username}")
             eve_char.user = user_account
         
         eve_char.save()
@@ -281,6 +309,7 @@ def sso_complete_login(request):
         # This handles the case where the EveCharacter was created
         # but the token fields were not updated.
         # A bit redundant with the defaults, but ensures freshness.
+        logger.debug(f"SSO Step 3: New EveCharacter {char_id} created as an alt")
         
         # --- NEW: Make sure only one main ---
         # If we just created a new alt, ensure it's not set as main
@@ -297,6 +326,7 @@ def sso_complete_login(request):
 
     # 7. We have the user object in memory, so we can
     #    now safely delete the redirect object.
+    logger.debug(f"SSO Step 3: Deleting CallbackRedirect {callback_redirect.pk}")
     callback_redirect.delete()
 
     # 8. Now, we perform the login logic.
@@ -306,6 +336,7 @@ def sso_complete_login(request):
         # Only log the user in if they weren't *already* logged in
         # at the start of this request.
         if not user_was_authenticated:
+            logger.info(f"SSO Step 3: Logging in user {user_account.username}")
         # --- END FIX ---
             if not user_account.is_active: # This is a good safety check
                 user_account.is_active = True
@@ -319,6 +350,7 @@ def sso_complete_login(request):
             request.session.save()
     
     # 11. Send the now-logged-in user to the homepage.
+    logger.info(f"SSO Step 3: Login complete for {char_name}, redirecting to home")
     # --- MODIFIED ---
     return redirect('waitlist:home')
 # --- END FIX ---
@@ -328,6 +360,7 @@ def esi_logout(request):
     """
     Logs the user out of the Django application.
     """
+    logger.info(f"User {request.user.username} logging out")
     logout(request)
     # --- MODIFIED ---
     return redirect('waitlist:home')

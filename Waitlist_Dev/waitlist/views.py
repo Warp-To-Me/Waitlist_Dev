@@ -31,6 +31,16 @@ from django.contrib.auth import logout
 from bravado.exception import HTTPNotFound
 # --- END NEW IMPORTS ---
 
+# ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
 
 # --- NEW: Helper function to check for FC status ---
 def is_fleet_commander(user):
@@ -55,28 +65,35 @@ def get_refreshed_token_for_character(user, character):
         ).order_by('-created').first()
         
         if not token:
+            logger.warning(f"No ESI token found for character {character.character_id}")
             raise Token.DoesNotExist
 
         # --- FIX: Handle token_expiry being None (e.g., on first login) ---
         if not character.token_expiry or character.token_expiry < timezone.now():
+            logger.info(f"Refreshing ESI token for {character.character_name} ({character.character_id})")
             token.refresh()
             character.access_token = token.access_token
             # .expires is an in-memory attribute added by .refresh()
             character.token_expiry = token.expires 
             character.save()
+            logger.info(f"Token refreshed successfully for {character.character_name}")
             
         return token
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 400:
             # Refresh token is invalid.
+            logger.error(f"ESI token refresh failed for {character.character_name}. Token is invalid/revoked.")
             raise Exception("Your ESI token is invalid or has been revoked. Please log out and back in.")
         else:
+            logger.error(f"ESI HTTPError during token refresh for {character.character_name}: {e}")
             raise e # Re-raise other ESI errors
     except Token.DoesNotExist:
+        logger.warning(f"Token.DoesNotExist raised for {character.character_name}")
         raise Exception("Could not find a valid ESI token for this character.")
     except Exception as e:
         # Catch other errors, like TypeError if token_expiry is None
+        logger.error(f"Unexpected token error for {character.character_name}: {e}", exc_info=True)
         raise Exception(f"An unexpected token error occurred: {e}")
 # --- END NEW HELPER ---
 
@@ -89,11 +106,13 @@ def _update_fleet_structure(esi, fc_character, token, fleet_id, fleet_obj):
     Pulls ESI fleet structure and saves it to the DB.
     *** This preserves existing category mappings. ***
     """
+    logger.debug(f"Updating fleet structure for fleet {fleet_id} (Fleet Obj: {fleet_obj.id})")
     # 1. Get wings from ESI
     wings = esi.client.Fleets.get_fleets_fleet_id_wings(
         fleet_id=fleet_id,
         token=token.access_token
     ).results()
+    logger.debug(f"Found {len(wings)} wings in ESI")
     
     # 2. Get all *existing* category mappings from the DB before clearing
     existing_mappings = {
@@ -101,6 +120,7 @@ def _update_fleet_structure(esi, fc_character, token, fleet_id, fleet_obj):
         for s in FleetSquad.objects.filter(wing__fleet=fleet_obj)
         if s.assigned_category is not None
     }
+    logger.debug(f"Preserved {len(existing_mappings)} existing squad mappings")
 
     # 3. Clear old structure
     FleetWing.objects.filter(fleet=fleet_obj).delete() # This cascades and deletes squads
@@ -124,6 +144,7 @@ def _update_fleet_structure(esi, fc_character, token, fleet_id, fleet_obj):
                 name=squad['name'], # Use the name from ESI
                 assigned_category=restored_category # Restore the mapping
             )
+    logger.info(f"Fleet structure update complete for fleet {fleet_id}")
 # ---
 # --- END HELPER FUNCTION
 # ---
@@ -147,11 +168,18 @@ def home(request):
     - If not, shows the simple login page (homepage.html).
     """
     
+    # --- NEW: Example Logging ---
+    # This will show up in your console if DEBUG is True in settings.py
+    logger.debug(f"User {request.user.username} accessing home view")
+    # --- End Logging ---
+    
     if not request.user.is_authenticated:
         # User is not logged in, show the simple homepage
+        logger.debug("User is not authenticated, showing public homepage.html")
         return render(request, 'homepage.html')
 
     # User is logged in, show the waitlist view
+    logger.debug("User is authenticated, preparing waitlist_view.html")
     
     # 1. Find the currently open waitlist (or return None)
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
@@ -159,12 +187,15 @@ def home(request):
     # 2. Get all fits for the open waitlist
     all_fits = []
     if open_waitlist:
+        logger.debug(f"Open waitlist found: {open_waitlist.fleet.description}")
         all_fits = ShipFit.objects.filter(
             waitlist=open_waitlist,
             # --- MODIFIED: Don't show IN_FLEET pilots ---
             status__in=['PENDING', 'APPROVED']
             # --- END MODIFIED ---
         ).select_related('character').order_by('submitted_at') # Order by time
+    else:
+        logger.debug("No open waitlist found.")
 
     # --- UPDATED: Sorting now uses the new 'category' field ---
     xup_fits = all_fits.filter(status='PENDING') if open_waitlist else []
@@ -210,6 +241,7 @@ def fittings_view(request):
     """
     Displays all available doctrine fits for all users to see.
     """
+    logger.debug(f"User {request.user.username} accessing fittings_view")
     # --- MODIFICATION: Group fits by category ---
     
     # 1. Define the category order and display names
@@ -224,6 +256,7 @@ def fittings_view(request):
 
     # 2. Get all fits, ordered correctly
     all_fits_list = DoctrineFit.objects.all().select_related('ship_type').order_by('category', 'name')
+    logger.debug(f"Found {all_fits_list.count()} total doctrine fits")
     
     # 3. Sort fits into the map
     for fit in all_fits_list:
@@ -426,6 +459,7 @@ def _get_attribute_value_from_item(item_type: EveType, attribute_id: int) -> flo
     """
     if not hasattr(item_type, '_attribute_cache'):
         # This is a fallback, but should not be hit in production
+        logger.warning(f"_get_attribute_value_from_item fallback for {item_type.name} (attr {attribute_id})")
         try:
             attr_obj = EveTypeDogmaAttribute.objects.get(type=item_type, attribute_id=attribute_id)
             return attr_obj.value or 0
@@ -449,7 +483,9 @@ def api_get_doctrine_fit_details(request):
     --- MODIFIED TO USE NEW SLOTTED STRUCTURE ---
     """
     fit_id = request.GET.get('fit_id')
+    logger.debug(f"User {request.user.username} requesting doctrine fit details for fit_id {fit_id}")
     if not fit_id:
+        logger.warning("api_get_doctrine_fit_details called without fit_id")
         return HttpResponseBadRequest("Missing fit_id")
         
     try:
@@ -458,15 +494,18 @@ def api_get_doctrine_fit_details(request):
         # 1. Get the ship's EveType
         ship_eve_type = doctrine.ship_type
         if not ship_eve_type:
+            logger.error(f"DoctrineFit {doctrine.id} ({doctrine.name}) is missing ship_type")
             raise Http404("Doctrine fit is missing a ship type.")
             
         # 2. Get the parsed list of items
         parsed_list = doctrine.get_parsed_fit_list()
         if not parsed_list:
+            logger.warning(f"DoctrineFit {doctrine.id} missing parsed_fit_json, re-parsing from raw EFT")
             # Fallback: re-parse from raw EFT
             if doctrine.raw_fit_eft:
                 _, parsed_list, _ = parse_eft_fit(doctrine.raw_fit_eft)
             else:
+                logger.error(f"DoctrineFit {doctrine.id} has no raw_fit_eft to parse")
                 parsed_list = [] # No data
 
         # 3. Build the slotted context
@@ -479,6 +518,7 @@ def api_get_doctrine_fit_details(request):
         # ---
 
         # 4. Return the new structure + the raw EFT for copying
+        logger.info(f"Successfully served doctrine fit details for {doctrine.name}")
         return JsonResponse({
             "status": "success",
             "name": doctrine.name,
@@ -487,8 +527,10 @@ def api_get_doctrine_fit_details(request):
         })
         
     except Http404:
+        logger.warning(f"DoctrineFit not found for fit_id {fit_id}")
         return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
     except Exception as e:
+        logger.error(f"Error in api_get_doctrine_fit_details for fit_id {fit_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 # --- END NEW API VIEW ---
 
@@ -503,8 +545,10 @@ def api_submit_fit(request):
     --- HEAVILY MODIFIED: Now uses fit_parser.py ---
     """
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
+    logger.debug(f"User {request.user.username} attempting fit submission")
 
     if not open_waitlist:
+        logger.warning(f"Fit submission failed for {request.user.username}: Waitlist is closed")
         return JsonResponse({"status": "error", "message": "The waitlist is currently closed."}, status=400)
 
     # Get data from the form
@@ -518,9 +562,11 @@ def api_submit_fit(request):
             user=request.user
         )
     except EveCharacter.DoesNotExist:
+        logger.warning(f"Fit submission failed: User {request.user.username} submitted for char {character_id} which they don't own")
         return JsonResponse({"status": "error", "message": "Invalid character selected."}, status=403)
     
     if not raw_fit_original:
+        logger.warning(f"Fit submission failed for {character.character_name}: Fit was empty")
         return JsonResponse({"status": "error", "message": "Fit cannot be empty."}, status=400)
     
     # ---
@@ -528,14 +574,21 @@ def api_submit_fit(request):
     # ---
     try:
         # 1. Call the centralized parser
+        logger.debug(f"Parsing fit for {character.character_name}")
         ship_type, parsed_fit_list, fit_summary_counter = parse_eft_fit(raw_fit_original)
         ship_type_id = ship_type.type_id
+        logger.debug(f"Fit parsed successfully: {ship_type.name}")
 
         # 2. Check for Auto-Approval
+        logger.debug(f"Checking {ship_type.name} against doctrines")
         doctrine, new_status, new_category = check_fit_against_doctrines(
             ship_type_id,
             dict(fit_summary_counter)
         )
+        if doctrine:
+            logger.info(f"Fit for {character.character_name} matched doctrine {doctrine.name}. Status: {new_status}")
+        else:
+            logger.info(f"Fit for {character.character_name} did not match doctrine. Status: {new_status}")
 
         # 3. Save to database
         fit, created = ShipFit.objects.update_or_create(
@@ -559,15 +612,19 @@ def api_submit_fit(request):
         )
         
         if created:
+            logger.info(f"New fit {fit.id} created for {character.character_name}")
             return JsonResponse({"status": "success", "message": f"Fit for {character.character_name} submitted!"})
         else:
+            logger.info(f"Fit {fit.id} updated for {character.character_name}")
             return JsonResponse({"status": "success", "message": f"Fit for {character.character_name} updated."})
 
     except ValueError as e:
         # Catch parsing errors raised from parse_eft_fit
+        logger.warning(f"Fit parsing failed for {character.character_name}: {e}")
         return JsonResponse({"status": "error", "message": str(e)}, status=400)
     except Exception as e:
         # Catch other unexpected issues
+        logger.error(f"Unexpected error in api_submit_fit for {character.character_name}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}, status=500)
     # --- END MODIFICATION ---
 
@@ -580,14 +637,17 @@ def api_update_fit_status(request):
     This is called by the JavaScript 'fetch' command.
     """
     if not request.user.groups.filter(name='Fleet Commander').exists():
+        logger.warning(f"Non-FC user {request.user.username} tried to update fit status")
         return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
 
     fit_id = request.POST.get('fit_id')
     action = request.POST.get('action')
+    logger.info(f"FC {request.user.username} performing action '{action}' on fit {fit_id}")
 
     try:
         fit = ShipFit.objects.get(id=fit_id)
     except ShipFit.DoesNotExist:
+        logger.warning(f"FC {request.user.username} tried to {action} non-existent fit {fit_id}")
         return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
 
     if action == 'approve':
@@ -597,17 +657,21 @@ def api_update_fit_status(request):
         # We only do this if it wasn't auto-assigned
         if fit.category == ShipFit.FitCategory.NONE:
             fit.category = ShipFit.FitCategory.OTHER # <-- MODIFIED
+            logger.debug(f"Fit {fit.id} approved, category set to OTHER")
         # --- END UPDATE ---
         
         fit.save()
+        logger.info(f"Fit {fit.id} ({fit.character.character_name}) approved by {request.user.username}")
         return JsonResponse({"status": "success", "message": "Fit approved"})
         
     elif action == 'deny':
         fit.status = 'DENIED'
         fit.denial_reason = "Denied by FC from waitlist."
         fit.save()
+        logger.info(f"Fit {fit.id} ({fit.character.character_name}) denied by {request.user.username}")
         return JsonResponse({"status": "success", "message": "Fit denied"})
 
+    logger.warning(f"FC {request.user.username} sent invalid action '{action}' for fit {fit_id}")
     return JsonResponse({"status": "error", "message": "Invalid action"}, status=400)
 
 
@@ -618,10 +682,13 @@ def api_get_waitlist_html(request):
     Returns just the HTML for the waitlist columns.
     Used by the live polling JavaScript.
     """
+    # This view is polled every 5s, so we use DEBUG level
+    logger.debug(f"Polling request received from {request.user.username}")
     
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     
     if not open_waitlist:
+        logger.debug("Polling request: Waitlist is closed")
         return HttpResponseBadRequest("Waitlist closed")
 
     all_fits = ShipFit.objects.filter(
@@ -653,6 +720,7 @@ def api_get_waitlist_html(request):
         'is_fc': is_fc,
     }
     
+    logger.debug(f"Polling response: XUP:{xup_fits.count()}, LOGI:{logi_fits.count()}, DPS:{dps_fits.count()}, SNIPER:{sniper_fits.count()}, OTHER:{other_fits.count()}")
     return render(request, '_waitlist_columns.html', context)
 
 
@@ -667,10 +735,13 @@ def api_get_fit_details(request):
     --- HEAVILY MODIFIED TO TRUST THE PARSER'S 'final_slot' ---
     """
     if not is_fleet_commander(request.user):
+        logger.warning(f"Non-FC user {request.user.username} tried to get fit details")
         return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
         
     fit_id = request.GET.get('fit_id')
+    logger.debug(f"FC {request.user.username} requesting fit details for fit_id {fit_id}")
     if not fit_id:
+        logger.warning("api_get_fit_details called without fit_id")
         return HttpResponseBadRequest("Missing fit_id")
         
     try:
@@ -679,6 +750,7 @@ def api_get_fit_details(request):
         # 1. Get the ship's EveType and base slot counts
         ship_eve_type = EveType.objects.filter(type_id=fit.ship_type_id).first()
         if not ship_eve_type:
+            logger.error(f"Could not find EveType for ship_type_id {fit.ship_type_id} (Fit {fit.id})")
             return JsonResponse({"status": "error", "message": "Ship hull not found in SDE cache."}, status=404)
             
         slot_counts = {
@@ -694,6 +766,7 @@ def api_get_fit_details(request):
         try:
             full_fit_list = json.loads(fit.parsed_fit_json) if fit.parsed_fit_json else []
         except json.JSONDecodeError:
+            logger.warning(f"Corrupted parsed_fit_json for Fit {fit.id}")
             full_fit_list = [] # Handle corrupted JSON
             
         # 3. Get the best matching doctrine
@@ -718,6 +791,7 @@ def api_get_fit_details(request):
         if doctrine:
             doctrine_name = doctrine.name
             doctrine_items_to_fill = Counter(doctrine.get_fit_items())
+            logger.debug(f"Comparing fit {fit.id} against doctrine '{doctrine_name}'")
             
         sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
         sub_map = {} # { 'base_id': {set of allowed_ids} }
@@ -731,6 +805,7 @@ def api_get_fit_details(request):
             for sub_id in allowed_ids:
                 if sub_id != group.base_item_id:
                     reverse_sub_map[str(sub_id)] = base_id_str
+        logger.debug(f"Loaded {len(sub_map)} manual substitution groups")
 
         # --- *** NEW: Pre-cache all attributes for these types *** ---
         attribute_values_by_type = {}
@@ -745,6 +820,7 @@ def api_get_fit_details(request):
         # Now, attach this cache to each EveType object
         for type_id, item_type in item_types_map.items():
             item_type._attribute_cache = attribute_values_by_type.get(type_id, {})
+        logger.debug(f"Pre-cached {len(dogma_attrs)} dogma attributes for {len(item_types_map)} types")
         # --- *** END NEW *** ---
 
         # --- *** NEW: Get all ItemComparisonRules in one query *** ---
@@ -754,6 +830,7 @@ def api_get_fit_details(request):
             if rule.group_id not in rules_by_group:
                 rules_by_group[rule.group_id] = []
             rules_by_group[rule.group_id].append(rule)
+        logger.debug(f"Loaded {len(all_rules)} automatic comparison rules")
         # --- *** END NEW *** ---
 
         # 4c. Create bins to sort items into
@@ -1033,6 +1110,7 @@ def api_get_fit_details(request):
 
 
         # 7. Return the full structure
+        logger.info(f"Successfully served fit details for fit {fit.id} ({fit.character.character_name})")
         return JsonResponse({
             "status": "success",
             "name": f"{fit.character.character_name} vs. {doctrine_name}",
@@ -1053,12 +1131,14 @@ def api_get_fit_details(request):
         })
 
     except Http404:
+        logger.warning(f"FC {request.user.username} requested fit {fit_id}, but it was not found")
         return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
     except Exception as e:
         # --- ADDED: Print exception for debugging ---
         import traceback
         print(traceback.format_exc())
         # --- END ADDED ---
+        logger.error(f"Error in api_get_fit_details for fit_id {fit_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 # --- END MODIFICATION ---
 
@@ -1073,8 +1153,10 @@ def api_add_substitution(request):
     """
     base_item_id = request.POST.get('base_item_id')
     substitute_item_id = request.POST.get('substitute_item_id')
+    logger.debug(f"FC {request.user.username} adding substitution: base={base_item_id}, sub={substitute_item_id}")
     
     if not base_item_id or not substitute_item_id:
+        logger.warning(f"api_add_substitution failed: Missing item IDs")
         return JsonResponse({"status": "error", "message": "Missing item IDs."}, status=400)
         
     try:
@@ -1086,9 +1168,12 @@ def api_add_substitution(request):
             base_item=base_item,
             defaults={'name': f"Substitutes for {base_item.name}"}
         )
+        if created:
+            logger.info(f"Created new substitution group for {base_item.name}")
         
         # Add the new item to the group
         group.substitutes.add(sub_item)
+        logger.info(f"Added '{sub_item.name}' as substitute for '{base_item.name}' by {request.user.username}")
         
         return JsonResponse({
             "status": "success",
@@ -1096,8 +1181,10 @@ def api_add_substitution(request):
         })
 
     except EveType.DoesNotExist:
+        logger.warning(f"api_add_substitution failed: EveType not found (base={base_item_id}, sub={substitute_item_id})")
         return JsonResponse({"status": "error", "message": "Item not found in database."}, status=404)
     except Exception as e:
+        logger.error(f"Error in api_add_substitution: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 # --- END NEW VIEW ---
 
@@ -1109,6 +1196,7 @@ def fc_admin_view(request):
     """
     Displays the FC admin page for opening/closing waitlists.
     """
+    logger.debug(f"FC {request.user.username} accessing fc_admin_view")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).select_related('fleet', 'fleet__fleet_commander').first()
     
     # Get all characters for the logged-in user to populate the dropdown
@@ -1154,15 +1242,18 @@ def api_fc_manage_waitlist(request):
     
     
     action = request.POST.get('action')
+    logger.info(f"FC {request.user.username} performing manage_waitlist action: '{action}'")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
 
     if action == 'close':
         if not open_waitlist:
+            logger.warning(f"FC {request.user.username} tried to close waitlist, but none is open")
             return JsonResponse({"status": "error", "message": "Waitlist is already closed."}, status=400)
         
         try:
             # Find the related fleet and deactivate it
             fleet = open_waitlist.fleet
+            logger.info(f"Closing waitlist for fleet {fleet.description} (ID: {fleet.id})")
             fleet.is_active = False
             # --- NEW: Clear dynamic data on close ---
             fleet.fleet_commander = None
@@ -1183,10 +1274,12 @@ def api_fc_manage_waitlist(request):
                 waitlist=open_waitlist,
                 status='PENDING'
             )
-            pending_fits.update(status='DENIED', denial_reason="Waitlist closed before approval.")
+            count = pending_fits.update(status='DENIED', denial_reason="Waitlist closed before approval.")
+            logger.info(f"Denied {count} pending fits.")
             
             return JsonResponse({"status": "success", "message": "Waitlist closed. All pending fits denied."})
         except Exception as e:
+            logger.error(f"Error closing waitlist: {e}", exc_info=True)
             return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 
     # ---
@@ -1194,12 +1287,14 @@ def api_fc_manage_waitlist(request):
     # ---
     elif action == 'open':
         if open_waitlist:
+            logger.warning(f"FC {request.user.username} tried to open waitlist, but one is already open")
             return JsonResponse({"status": "error", "message": "A waitlist is already open. Please close it first."}, status=400)
 
         fleet_id = request.POST.get('fleet_id')
         fleet_commander_id = request.POST.get('fleet_commander_id')
 
         if not all([fleet_id, fleet_commander_id]):
+            logger.warning(f"FC {request.user.username} tried to open waitlist with missing data")
             return JsonResponse({"status": "error", "message": "Fleet Type and FC Character are required."}, status=400)
             
         try:
@@ -1221,15 +1316,19 @@ def api_fc_manage_waitlist(request):
             waitlist.is_open = True
             waitlist.save()
             
+            logger.info(f"Waitlist '{fleet_to_open.description}' opened by FC {fc_character.character_name}")
             return JsonResponse({"status": "success", "message": f"Waitlist '{fleet_to_open.description}' opened. Please link your in-game fleet."})
             
         except EveCharacter.DoesNotExist:
+            logger.warning(f"FC {request.user.username} tried to open waitlist with invalid char_id {fleet_commander_id}")
             return JsonResponse({"status": "error", "message": "Invalid FC character selected."}, status=403)
         # --- MODIFIED: More specific error ---
         except Fleet.DoesNotExist:
+            logger.warning(f"FC {request.user.username} tried to open fleet {fleet_id} which is active or non-existent")
             return JsonResponse({"status": "error", "message": "The fleet you selected is already open or does not exist."}, status=400)
         except Exception as e:
             # Catch other errors
+            logger.error(f"Error opening waitlist: {e}", exc_info=True)
             return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
     # ---
     # --- END 'open' MODIFICATION
@@ -1240,10 +1339,12 @@ def api_fc_manage_waitlist(request):
     # ---
     elif action == 'takeover':
         if not open_waitlist:
+            logger.warning(f"FC {request.user.username} tried to link fleet, but no waitlist is open")
             return JsonResponse({"status": "error", "message": "No waitlist is currently open to link a fleet to."}, status=400)
             
         fleet_commander_id = request.POST.get('fleet_commander_id')
         if not fleet_commander_id:
+            logger.warning(f"FC {request.user.username} tried to link fleet with no FC char selected")
             return JsonResponse({"status": "error", "message": "FC Character is required."}, status=400)
             
         try:
@@ -1252,6 +1353,7 @@ def api_fc_manage_waitlist(request):
                 character_id=fleet_commander_id, 
                 user=request.user
             )
+            logger.debug(f"FC {fc_character.character_name} attempting to link fleet")
             token = get_refreshed_token_for_character(request.user, fc_character)
 
             # 2. Check for required ESI scopes
@@ -1264,6 +1366,7 @@ def api_fc_manage_waitlist(request):
             
             if not all(s in available_scopes for s in required_scopes):
                 missing = [s for s in required_scopes if s not in available_scopes]
+                logger.warning(f"FC {fc_character.character_name} link failed: Missing scopes: {missing}")
                 return JsonResponse({
                     "status": "error", 
                     "message": f"Missing required FC scopes: {', '.join(missing)}. Please log in again using the 'Add FC Scopes' option."
@@ -1276,6 +1379,7 @@ def api_fc_manage_waitlist(request):
             
             # 4. Make ESI call to get fleet info
             try:
+                logger.debug(f"Getting ESI fleet info for {fc_character.character_name}")
                 fleet_info = esi.client.Fleets.get_characters_character_id_fleet(
                     character_id=fc_character.character_id,
                     token=token.access_token
@@ -1283,19 +1387,23 @@ def api_fc_manage_waitlist(request):
                 
                 # 5. Check if character is the fleet boss
                 if fleet_info.get('role') != 'fleet_commander':
+                    logger.warning(f"FC {fc_character.character_name} link failed: Not fleet boss (Role: {fleet_info.get('role')})")
                     return JsonResponse({"status": "error", "message": "You are not the Fleet Commander (Boss) of your current fleet."}, status=403)
 
                 # 6. Get the new ESI Fleet ID
                 new_esi_fleet_id = fleet_info.get('fleet_id')
+                logger.debug(f"Got ESI fleet ID: {new_esi_fleet_id}")
 
             # --- MODIFIED: Catch 404 and return error ---
             except HTTPNotFound as e:
                 # 404 means user is not in a fleet.
+                logger.warning(f"FC {fc_character.character_name} link failed: Not in a fleet (404)")
                 return JsonResponse({"status": "error", "message": "You are not in a fleet. Please create one in-game first, then link it."}, status=400)
             
             # --- End modification ---
 
             if not new_esi_fleet_id:
+                logger.error(f"FC {fc_character.character_name} link failed: ESI returned no fleet ID")
                 return JsonResponse({"status": "error", "message": "Could not fetch new Fleet ID from ESI."}, status=500)
 
             # 7. Update the existing Fleet object
@@ -1305,9 +1413,11 @@ def api_fc_manage_waitlist(request):
             fleet.save()
             
             # --- 8. NEW: Pull the fleet structure ---
+            logger.debug(f"Pulling fleet structure for {new_esi_fleet_id}")
             _update_fleet_structure(esi, fc_character, token, new_esi_fleet_id, fleet)
             # --- END NEW ---
             
+            logger.info(f"Fleet {fleet.id} successfully linked to ESI fleet {new_esi_fleet_id} by {fc_character.character_name}")
             return JsonResponse({
                 "status": "success", 
                 "message": f"Waitlist successfully linked to fleet {new_esi_fleet_id} and structure updated.",
@@ -1315,14 +1425,17 @@ def api_fc_manage_waitlist(request):
             })
             
         except EveCharacter.DoesNotExist:
+            logger.warning(f"FC {request.user.username} link failed: Invalid char_id {fleet_commander_id}")
             return JsonResponse({"status": "error", "message": "Invalid FC character selected."}, status=403)
         except Exception as e:
+            logger.error(f"Error linking fleet: {e}", exc_info=True)
             return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
     # ---
     # --- END 'takeover' MODIFICATION
     # ---
 
     # --- THIS IS THE FIX ---
+    logger.error(f"FC {request.user.username} sent invalid action: '{action}'")
     return JsonResponse({"status": "error", "message": "Invalid action."}, status=400)
     # --- END THE FIX ---
 
@@ -1337,12 +1450,15 @@ def api_get_fleet_structure(request):
     Returns the current fleet's wing/squad structure
     from the database.
     """
+    logger.debug(f"FC {request.user.username} getting fleet structure")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     if not open_waitlist:
+        logger.debug("api_get_fleet_structure: No waitlist open")
         return JsonResponse({"status": "error", "message": "No waitlist is open."}, status=400)
         
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id:
+        logger.debug(f"api_get_fleet_structure: Fleet {fleet.id} not linked to ESI")
         return JsonResponse({"status": "error", "message": "Fleet is not linked to ESI."}, status=400)
 
     # 1. Get all wings and squads from our DB
@@ -1381,6 +1497,7 @@ def api_get_fleet_structure(request):
             })
         structure["wings"].append(wing_data)
 
+    logger.debug(f"Returning {len(structure['wings'])} wings for fleet {fleet.id}")
     return JsonResponse({"status": "success", "structure": structure})
 
 
@@ -1392,12 +1509,15 @@ def api_save_squad_mappings(request):
     Saves the category-to-squad mappings AND new names.
     This now pushes name changes to ESI.
     """
+    logger.info(f"FC {request.user.username} saving squad mappings")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     if not open_waitlist:
+        logger.warning(f"api_save_squad_mappings: No waitlist open")
         return JsonResponse({"status": "error", "message": "No waitlist is open."}, status=400)
         
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id or not fleet.fleet_commander:
+        logger.warning(f"api_save_squad_mappings: Fleet {fleet.id} not linked")
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
         
     try:
@@ -1410,6 +1530,7 @@ def api_save_squad_mappings(request):
         data = json.loads(request.body)
         wing_data = data.get('wings', [])
         squad_data = data.get('squads', [])
+        logger.debug(f"Received {len(wing_data)} wings and {len(squad_data)} squads to update")
         
         # 3. Get all wings/squads for this fleet from DB
         all_db_wings = {w.wing_id: w for w in fleet.wings.all()}
@@ -1426,6 +1547,7 @@ def api_save_squad_mappings(request):
             db_wing = all_db_wings.get(wing_id)
             if db_wing and db_wing.name != new_name:
                 # Name changed, push to ESI
+                logger.debug(f"Renaming wing {wing_id} to '{new_name}' in ESI")
                 esi.client.Fleets.put_fleets_fleet_id_wings_wing_id(
                     fleet_id=fleet.esi_fleet_id,
                     wing_id=wing_id,
@@ -1447,6 +1569,7 @@ def api_save_squad_mappings(request):
                 # Check for name change
                 if db_squad.name != new_name:
                     # Name changed, push to ESI
+                    logger.debug(f"Renaming squad {squad_id} to '{new_name}' in ESI")
                     esi.client.Fleets.put_fleets_fleet_id_squads_squad_id(
                         fleet_id=fleet.esi_fleet_id,
                         squad_id=squad_id,
@@ -1462,6 +1585,7 @@ def api_save_squad_mappings(request):
         # ---
         # --- 7. NEW: Refresh structure from ESI and return it
         # ---
+        logger.debug("Refreshing fleet structure from ESI after save")
         _update_fleet_structure(
             esi, fc_character, token, 
             fleet.esi_fleet_id, fleet
@@ -1494,11 +1618,14 @@ def api_save_squad_mappings(request):
             }
             structure["wings"].append(wing_data)
 
+        logger.info(f"Squad mappings saved successfully by {request.user.username}")
         return JsonResponse({"status": "success", "structure": structure})
         
     except json.JSONDecodeError:
+        logger.warning(f"api_save_squad_mappings: Invalid JSON received from {request.user.username}")
         return JsonResponse({"status": "error", "message": "Invalid request data."}, status=400)
     except Exception as e:
+        logger.error(f"Error saving squad mappings: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 
 
@@ -1519,6 +1646,7 @@ def api_fc_invite_pilot(request):
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     fit_id = request.POST.get('fit_id')
+    logger.debug(f"FC {request.user.username} inviting fit {fit_id}")
     
     try:
         # 1. Get the fit and the pilot to be invited
@@ -1544,11 +1672,13 @@ def api_fc_invite_pilot(request):
                 role = "squad_commander" if mapped_squad.name.lower().startswith("scout") else "squad_member"
                 wing_id = mapped_squad.wing.wing_id
                 squad_id = mapped_squad.squad_id
+                logger.debug(f"Found mapped squad {squad_id} for category {fit.category}")
                 
             except FleetSquad.DoesNotExist:
                 # ---
                 # --- THIS IS THE FIX ---
                 # ---
+                logger.debug(f"No squad mapped for {fit.category}, finding fallback")
                 # No specific squad mapped.
                 # Fallback: Try to find "On Grid" wing.
                 on_grid_wing = fleet.wings.filter(name="On Grid").first()
@@ -1558,6 +1688,7 @@ def api_fc_invite_pilot(request):
                     if first_squad:
                         wing_id = first_squad.wing.wing_id
                         squad_id = first_squad.squad_id
+                        logger.debug(f"Using 'On Grid' fallback squad {squad_id}")
                 
                 # If "On Grid" not found or has no squads, use the absolute first wing/squad
                 if not squad_id:
@@ -1567,6 +1698,7 @@ def api_fc_invite_pilot(request):
                         if first_squad:
                             wing_id = first_wing.wing_id
                             squad_id = first_squad.squad_id
+                            logger.debug(f"Using absolute first squad {squad_id}")
                 # ---
                 # --- END THE FIX ---
                 # ---
@@ -1574,6 +1706,7 @@ def api_fc_invite_pilot(request):
         if not wing_id or not squad_id:
             # Fallback if fleet has no wings/squads
             role = "fleet_commander" # Should never happen, but safe fallback
+            logger.warning(f"No squads found for fleet {fleet.id}, defaulting role to fleet_commander")
         
         # 4. Build the ESI invitation dict
         invitation = {
@@ -1586,6 +1719,7 @@ def api_fc_invite_pilot(request):
             invitation["squad_id"] = squad_id
         
         # 5. Send the invite
+        logger.debug(f"Sending ESI invite to {pilot_to_invite.character_name}: {invitation}")
         esi = EsiClientProvider()
         esi.client.Fleets.post_fleets_fleet_id_members(
             fleet_id=fleet.esi_fleet_id,
@@ -1596,13 +1730,16 @@ def api_fc_invite_pilot(request):
         # 6. Update the fit status
         fit.status = ShipFit.FitStatus.IN_FLEET
         fit.save()
-
+        
+        logger.info(f"Invite sent to {pilot_to_invite.character_name} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "Invite sent."})
 
     except ShipFit.DoesNotExist:
+        logger.warning(f"FC {request.user.username} tried to invite non-existent/unapproved fit {fit_id}")
         return JsonResponse({"status": "error", "message": "Fit not found or not approved."}, status=404)
     except Exception as e:
         # Catch ESI errors (e.g., pilot already in fleet)
+        logger.error(f"Error inviting pilot for fit {fit_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"ESI Error: {str(e)}"}, status=500)
 
 
@@ -1622,12 +1759,15 @@ def api_fc_create_default_layout(request):
     creates new ones if needed, and renames any leftovers
     to a generic "Squad X" format.
     """
+    logger.info(f"FC {request.user.username} creating default fleet layout")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     if not open_waitlist:
+        logger.warning("api_fc_create_default_layout: No waitlist open")
         return JsonResponse({"status": "error", "message": "Waitlist is closed."}, status=400)
         
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id or not fleet.fleet_commander:
+        logger.warning(f"api_fc_create_default_layout: Fleet {fleet.id} not linked")
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     try:
@@ -1673,23 +1813,27 @@ def api_fc_create_default_layout(request):
         # --- NEW: FC Position Check ---
         # ---
         try:
+            logger.debug(f"Checking FC position for {fc_character.character_name}")
             fleet_info = esi.client.Fleets.get_characters_character_id_fleet(
                 character_id=fc_character.character_id,
                 token=token.access_token
             ).results()
             
             if fleet_info.get('role') != 'fleet_commander':
+                logger.warning(f"Default layout failed: FC {fc_character.character_name} is in a squad")
                 return JsonResponse({
                     "status": "error", 
                     "message": "You are in a squad. Please move yourself to the 'Fleet Command' position before creating the layout."
                 }, status=400)
         except HTTPNotFound:
+             logger.warning(f"Default layout failed: FC {fc_character.character_name} not in fleet")
              return JsonResponse({"status": "error", "message": "You are not in the fleet. Please link the fleet first."}, status=400)
         # ---
         # --- END NEW CHECK ---
         # ---
 
         # 3. Get the *current* fleet structure from ESI
+        logger.debug(f"Getting current ESI structure for fleet {fleet_id}")
         current_wings = esi.client.Fleets.get_fleets_fleet_id_wings(
             fleet_id=fleet_id,
             token=token.access_token
@@ -1697,6 +1841,7 @@ def api_fc_create_default_layout(request):
         
         # 4. Clear our local DB structure
         FleetWing.objects.filter(fleet=fleet).delete()
+        logger.debug("Cleared local DB structure")
 
         # 5. --- MERGE/PAVE ---
         # Loop through our desired layout and apply it
@@ -1713,6 +1858,7 @@ def api_fc_create_default_layout(request):
             if esi_wing:
                 # Reuse existing wing
                 wing_id = esi_wing['id']
+                logger.debug(f"Reusing and renaming wing {wing_id} to '{wing_name}'")
                 # Rename it
                 esi.client.Fleets.put_fleets_fleet_id_wings_wing_id(
                     fleet_id=fleet_id,
@@ -1722,6 +1868,7 @@ def api_fc_create_default_layout(request):
                 ).results()
             else:
                 # Create new wing
+                logger.debug(f"Creating new wing, renaming to '{wing_name}'")
                 new_wing_op = esi.client.Fleets.post_fleets_fleet_id_wings(
                     fleet_id=fleet_id,
                     token=token.access_token
@@ -1763,6 +1910,7 @@ def api_fc_create_default_layout(request):
                 if esi_squad:
                     # Reuse existing squad
                     squad_id = esi_squad['id']
+                    logger.debug(f"  Reusing squad {squad_id}, renaming to '{squad_name}'")
                     # Rename it
                     esi.client.Fleets.put_fleets_fleet_id_squads_squad_id(
                         fleet_id=fleet_id,
@@ -1772,6 +1920,7 @@ def api_fc_create_default_layout(request):
                     ).results()
                 else:
                     # Create new squad
+                    logger.debug(f"  Creating new squad in wing {wing_id}, renaming to '{squad_name}'")
                     new_squad = esi.client.Fleets.post_fleets_fleet_id_wings_wing_id_squads(
                         fleet_id=fleet_id,
                         wing_id=wing_id,
@@ -1803,6 +1952,7 @@ def api_fc_create_default_layout(request):
                     esi_squad = existing_squads[i]
                     squad_id = esi_squad['id']
                     squad_name = f"Squad {i + 1}"
+                    logger.debug(f"  Cleaning up leftover squad {squad_id}, renaming to '{squad_name}'")
                     
                     # Rename it
                     esi.client.Fleets.put_fleets_fleet_id_squads_squad_id(
@@ -1829,6 +1979,7 @@ def api_fc_create_default_layout(request):
                 esi_wing = current_wings[i]
                 wing_id = esi_wing['id']
                 wing_name = f"Wing {i + 1}"
+                logger.debug(f"Cleaning up leftover wing {wing_id}, renaming to '{wing_name}'")
                 
                 # Rename it
                 esi.client.Fleets.put_fleets_fleet_id_wings_wing_id(
@@ -1857,6 +2008,7 @@ def api_fc_create_default_layout(request):
                 # ---
                     squad_id = esi_squad['id']
                     squad_name = f"Squad {squad_index + 1}"
+                    logger.debug(f"  Cleaning up leftover squad {squad_id} in wing {wing_id}, renaming to '{squad_name}'")
                     
                     # Rename it
                     esi.client.Fleets.put_fleets_fleet_id_squads_squad_id(
@@ -1875,10 +2027,11 @@ def api_fc_create_default_layout(request):
                     )
                     squad_index += 1
 
-
+        logger.info(f"Default fleet layout created successfully for fleet {fleet_id} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "Fleet layout successfully merged and mappings saved."})
 
     except Exception as e:
+        logger.error(f"Error creating default layout: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 # ---
 # --- END NEW API
@@ -1896,12 +2049,15 @@ def api_fc_refresh_structure(request):
     Pulls the current fleet structure from ESI,
     updates the database, and returns the new structure.
     """
+    logger.debug(f"FC {request.user.username} refreshing fleet structure")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     if not open_waitlist:
+        logger.warning("api_fc_refresh_structure: No waitlist open")
         return JsonResponse({"status": "error", "message": "Waitlist is closed."}, status=400)
         
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id or not fleet.fleet_commander:
+        logger.warning(f"api_fc_refresh_structure: Fleet {fleet.id} not linked")
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     try:
@@ -1943,9 +2099,11 @@ def api_fc_refresh_structure(request):
                 })
             structure["wings"].append(wing_data)
 
+        logger.info(f"Fleet structure refreshed for {fleet.id} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "structure": structure})
 
     except Exception as e:
+        logger.error(f"Error refreshing fleet structure: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 # ---
 # --- END NEW API
@@ -1971,7 +2129,9 @@ def api_fc_add_squad(request):
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     wing_id = request.POST.get('wing_id')
+    logger.info(f"FC {request.user.username} adding squad to wing {wing_id}")
     if not wing_id:
+        logger.warning("api_fc_add_squad: Missing wing_id")
         return JsonResponse({"status": "error", "message": "Missing wing_id."}, status=400)
         
     try:
@@ -1988,6 +2148,7 @@ def api_fc_add_squad(request):
         
         # 2. Get the new squad ID
         squad_id = new_squad['squad_id']
+        logger.debug(f"Created new squad {squad_id} in ESI, renaming")
         
         # 3. Rename it to "New Squad"
         esi.client.Fleets.put_fleets_fleet_id_squads_squad_id(
@@ -2000,9 +2161,11 @@ def api_fc_add_squad(request):
         # 4. We don't need to update the DB, as the calling
         #    function will trigger a full refresh.
         
+        logger.info(f"Squad {squad_id} added to wing {wing_id} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "New squad added."})
 
     except Exception as e:
+        logger.error(f"Error adding squad to wing {wing_id}: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 
 
@@ -2022,7 +2185,9 @@ def api_fc_delete_squad(request):
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     squad_id = request.POST.get('squad_id')
+    logger.info(f"FC {request.user.username} deleting squad {squad_id}")
     if not squad_id:
+        logger.warning("api_fc_delete_squad: Missing squad_id")
         return JsonResponse({"status": "error", "message": "Missing squad_id."}, status=400)
         
     try:
@@ -2037,9 +2202,11 @@ def api_fc_delete_squad(request):
             token=token.access_token
         ).results()
         
+        logger.info(f"Squad {squad_id} deleted by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "Squad deleted."})
 
     except Exception as e:
+        logger.error(f"Error deleting squad {squad_id}: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 # ---
 # --- END NEW API
@@ -2063,6 +2230,8 @@ def api_fc_add_wing(request):
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id or not fleet.fleet_commander:
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
+    
+    logger.info(f"FC {request.user.username} adding wing to fleet {fleet.esi_fleet_id}")
         
     try:
         fc_character = fleet.fleet_commander
@@ -2077,6 +2246,7 @@ def api_fc_add_wing(request):
         
         # 2. Get the new wing ID
         wing_id = new_wing['wing_id']
+        logger.debug(f"Created new wing {wing_id} in ESI, renaming")
         
         # 3. Rename it to "New Wing"
         esi.client.Fleets.put_fleets_fleet_id_wings_wing_id(
@@ -2086,9 +2256,11 @@ def api_fc_add_wing(request):
             token=token.access_token
         ).results()
         
+        logger.info(f"Wing {wing_id} added to fleet by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "New wing added."})
 
     except Exception as e:
+        logger.error(f"Error adding wing: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 
 
@@ -2108,7 +2280,9 @@ def api_fc_delete_wing(request):
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     wing_id = request.POST.get('wing_id')
+    logger.info(f"FC {request.user.username} deleting wing {wing_id}")
     if not wing_id:
+        logger.warning("api_fc_delete_wing: Missing wing_id")
         return JsonResponse({"status": "error", "message": "Missing wing_id."}, status=400)
         
     try:
@@ -2123,9 +2297,11 @@ def api_fc_delete_wing(request):
             token=token.access_token
         ).results()
         
+        logger.info(f"Wing {wing_id} deleted by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "Wing deleted."})
 
     except Exception as e:
+        logger.error(f"Error deleting wing {wing_id}: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 # ---
 # --- END NEW API
@@ -2143,12 +2319,15 @@ def api_fc_refresh_structure(request):
     Pulls the current fleet structure from ESI,
     updates the database, and returns the new structure.
     """
+    logger.debug(f"FC {request.user.username} refreshing fleet structure")
     open_waitlist = FleetWaitlist.objects.filter(is_open=True).first()
     if not open_waitlist:
+        logger.warning("api_fc_refresh_structure: No waitlist open")
         return JsonResponse({"status": "error", "message": "Waitlist is closed."}, status=400)
         
     fleet = open_waitlist.fleet
     if not fleet.esi_fleet_id or not fleet.fleet_commander:
+        logger.warning(f"api_fc_refresh_structure: Fleet {fleet.id} not linked")
         return JsonResponse({"status": "error", "message": "Fleet is not linked or FC is not set."}, status=400)
 
     try:
@@ -2190,9 +2369,52 @@ def api_fc_refresh_structure(request):
                 })
             structure["wings"].append(wing_data)
 
+        logger.info(f"Fleet structure refreshed for {fleet.id} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "structure": structure})
 
+    # ---
+    # --- NEW: Catch HTTPNotFound specifically
+    # ---
+    except HTTPNotFound as e:
+        logger.warning(f"HTTPNotFound while refreshing fleet structure for fleet {fleet.id} (ESI ID: {fleet.esi_fleet_id}). ESI fleet is likely dead. Closing waitlist.")
+        
+        # The ESI fleet is gone. Close our waitlist.
+        try:
+            # Find the related fleet and deactivate it
+            fleet = open_waitlist.fleet
+            fleet.is_active = False
+            fleet.fleet_commander = None
+            fleet.esi_fleet_id = None
+            fleet.save()
+            
+            # Close the waitlist
+            open_waitlist.is_open = False
+            open_waitlist.save()
+            
+            # Clear fleet structure
+            FleetWing.objects.filter(fleet=fleet).delete()
+            
+            # Deny all pending fits
+            pending_fits = ShipFit.objects.filter(
+                waitlist=open_waitlist,
+                status='PENDING'
+            )
+            count = pending_fits.update(status='DENIED', denial_reason="Fleet closed (ESI fleet not found).")
+            logger.info(f"Closed waitlist {open_waitlist.id} and denied {count} pending fits.")
+
+            return JsonResponse({
+                "status": "error",
+                "message": "ESI fleet not found! It may have been closed in-game. The waitlist has been automatically closed."
+            }, status=404) # Return 404
+            
+        except Exception as close_e:
+            logger.error(f"Error during automatic waitlist close after HTTPNotFound: {close_e}", exc_info=True)
+            return JsonResponse({"status":"error", "message": f"ESI fleet not found, and an error occurred during auto-close: {close_e}"}, status=500)
+    # ---
+    # --- END NEW CATCH BLOCK
+    # ---
     except Exception as e:
+        logger.error(f"Error refreshing fleet structure: {e}", exc_info=True)
         return JsonResponse({"status":"error", "message": f"An error occurred: {str(e)}"}, status=500)
 # ---
 # --- END NEW API

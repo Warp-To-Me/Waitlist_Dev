@@ -5,10 +5,27 @@ from datetime import timedelta
 from esi.models import Token
 from waitlist.models import EveCharacter
 
+# ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
 class Command(BaseCommand):
     help = 'Refreshes ESI tokens that have not been used in 7 days.'
 
     def handle(self, *args, **options):
+        # --- NEW: Use logger instead of stdout ---
+        # Configure logger
+        logger.parent.handlers[0].setFormatter(
+            logging.Formatter('{levelname} {asctime} {module} {message}', style='{')
+        )
+        logger.parent.setLevel(logging.INFO) # Set to INFO for this command
+        
         # 1. Define the cutoff date
         # --- FIX: We query our EveCharacter model, not the Token model ---
         cutoff_date = timezone.now() - timedelta(days=7)
@@ -21,7 +38,8 @@ class Command(BaseCommand):
         refreshed_count = 0
         failed_count = 0
 
-        self.stdout.write(f"Found {total_tokens} stale tokens to refresh.")
+        logger.info(f"Found {total_tokens} stale tokens to refresh.")
+        # --- END NEW ---
 
         # 3. Loop through and refresh them
         for eve_char in stale_characters:
@@ -30,13 +48,15 @@ class Command(BaseCommand):
                 token = Token.objects.filter(character_id=eve_char.character_id).first()
                 
                 if not token:
-                    self.stdout.write(self.style.ERROR(f"No Token found for {eve_char.character_name}. Deleting character."))
+                    # --- NEW: Use logger ---
+                    logger.error(f"No Token found for {eve_char.character_name}. Deleting character.")
                     eve_char.delete()
                     failed_count += 1
                     continue
                 # --- END FIX ---
 
-                self.stdout.write(f"Refreshing token for {eve_char.character_name} ({eve_char.character_id})...")
+                logger.info(f"Refreshing token for {eve_char.character_name} ({eve_char.character_id})...")
+                # --- END NEW ---
                 
                 # This makes the ESI call to get a new access token
                 token.refresh() 
@@ -47,13 +67,16 @@ class Command(BaseCommand):
                 eve_char.token_expiry = token.expires 
                 eve_char.save()
                     
-                self.stdout.write(self.style.SUCCESS(f"Successfully refreshed token for {eve_char.character_name}."))
+                # --- NEW: Use logger ---
+                logger.info(f"Successfully refreshed token for {eve_char.character_name}.")
                 refreshed_count += 1
+                # --- END NEW ---
 
             except requests.exceptions.HTTPError as e:
                 # 5. Handle failed refresh (e.g., 400 Bad Request if revoked)
                 if e.response.status_code == 400:
-                    self.stdout.write(self.style.ERROR(f"Refresh failed for {eve_char.character_name}. Token is invalid. Deleting."))
+                    # --- NEW: Use logger ---
+                    logger.error(f"Refresh failed for {eve_char.character_name}. Token is invalid. Deleting.")
                     # Delete the invalid token and its associated character
                     if token:
                         token.delete()
@@ -61,10 +84,15 @@ class Command(BaseCommand):
                     failed_count += 1
                 else:
                     # Other ESI error
-                    self.stdout.write(self.style.ERROR(f"ESI error for {eve_char.character_name}: {e}"))
+                    logger.error(f"ESI error for {eve_char.character_name}: {e}")
                     failed_count += 1
+                    # --- END NEW ---
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"An unexpected error occurred for {eve_char.character_name}: {e}"))
+                # --- NEW: Use logger ---
+                logger.error(f"An unexpected error occurred for {eve_char.character_name}: {e}", exc_info=True)
                 failed_count += 1
+                # --- END NEW ---
 
-        self.stdout.write(self.style.SUCCESS(f"\nRefresh complete. Refreshed: {refreshed_count}, Failed/Deleted: {failed_count}"))
+        # --- NEW: Use logger ---
+        logger.info(f"\nRefresh complete. Refreshed: {refreshed_count}, Failed/Deleted: {failed_count}")
+        # --- END NEW ---

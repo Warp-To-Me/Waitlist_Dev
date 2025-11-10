@@ -7,6 +7,16 @@ from django.db import transaction, connection
 from pilot.models import EveCategory, EveGroup, EveType
 from waitlist.models import EveDogmaAttribute, EveTypeDogmaAttribute
 
+# ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
 # SDE File URLs
 SDE_BASE_URL = "https://www.fuzzwork.co.uk/dump/latest/"
 CATEGORIES_URL = f"{SDE_BASE_URL}invCategories.csv"
@@ -40,37 +50,52 @@ class Command(BaseCommand):
     help = 'Downloads and imports the latest SDE from Fuzzwork.'
 
     def handle(self, *args, **options):
+        # --- NEW: Use logger instead of stdout ---
         start_time = time.time()
         
-        with transaction.atomic():
-            self.stdout.write(self.style.SUCCESS("--- Starting SDE Import ---"))
-            
-            # 1. Eve Categories
-            self.import_categories()
-            
-            # 2. Eve Groups
-            self.import_groups()
-            
-            # 3. Eve Types
-            self.import_types()
-            
-            # 4. Dogma Attributes
-            self.import_dogma_attributes()
-            
-            # 5. Dogma Type Attributes (The big one)
-            self.import_dogma_type_attributes()
-            
-            # 6. Dogma Type Effects (for module slots)
-            self.import_dogma_type_effects()
+        # Configure logger to be verbose for this command
+        # This assumes you have a 'console' handler in settings.py
+        logger.parent.handlers[0].setFormatter(
+            logging.Formatter('{levelname} {asctime} {module} {message}', style='{')
+        )
+        logger.parent.setLevel(logging.DEBUG)
+        
+        logger.info("--- Starting SDE Import ---")
+        
+        try:
+            with transaction.atomic():
+                
+                # 1. Eve Categories
+                self.import_categories()
+                
+                # 2. Eve Groups
+                self.import_groups()
+                
+                # 3. Eve Types
+                self.import_types()
+                
+                # 4. Dogma Attributes
+                self.import_dogma_attributes()
+                
+                # 5. Dogma Type Attributes (The big one)
+                self.import_dogma_type_attributes()
+                
+                # 6. Dogma Type Effects (for module slots)
+                self.import_dogma_type_effects()
 
-            # 7. Post-processing: Populate EveType helper fields
-            self.populate_evetype_helpers()
+                # 7. Post-processing: Populate EveType helper fields
+                self.populate_evetype_helpers()
 
-        end_time = time.time()
-        self.stdout.write(self.style.SUCCESS(f"\n--- SDE Import Complete in {end_time - start_time:.2f} seconds ---"))
+            end_time = time.time()
+            logger.info(f"\n--- SDE Import Complete in {end_time - start_time:.2f} seconds ---")
+            
+        except Exception as e:
+            logger.error(f"--- SDE Import FAILED: {e} ---", exc_info=True)
+            logger.error("--- Transaction rolled back. Database is unchanged. ---")
+        # --- END NEW ---
 
     def _download_csv(self, url, columns):
-        self.stdout.write(f"Downloading {url.split('/')[-1]}...")
+        logger.info(f"Downloading {url.split('/')[-1]}...")
         try:
             r = requests.get(url)
             r.raise_for_status()
@@ -80,12 +105,14 @@ class Command(BaseCommand):
             return pd.read_csv(io.StringIO(r.text), usecols=columns)
             # --- *** END THE FIX *** ---
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f"Failed to download or parse {url}: {e}"))
+            # --- NEW: Use logger ---
+            logger.error(f"Failed to download or parse {url}: {e}")
             raise e # Stop the transaction
+            # --- END NEW ---
 
     def import_categories(self):
         df = self._download_csv(CATEGORIES_URL, ['categoryID', 'categoryName', 'iconID', 'published'])
-        self.stdout.write("Importing Eve Categories...")
+        logger.info("Importing Eve Categories...")
         
         EveCategory.objects.all().delete() # Clear old data
         
@@ -99,11 +126,11 @@ class Command(BaseCommand):
             for _, row in df.iterrows()
         ]
         EveCategory.objects.bulk_create(categories, batch_size=1000)
-        self.stdout.write(f"Imported {len(categories)} categories.")
+        logger.info(f"Imported {len(categories)} categories.")
 
     def import_groups(self):
         df = self._download_csv(GROUPS_URL, ['groupID', 'groupName', 'categoryID', 'iconID', 'published'])
-        self.stdout.write("Importing Eve Groups...")
+        logger.info("Importing Eve Groups...")
         
         EveGroup.objects.all().delete() # Clear old data
         
@@ -121,14 +148,14 @@ class Command(BaseCommand):
             for _, row in df.iterrows()
         ]
         EveGroup.objects.bulk_create(groups, batch_size=1000)
-        self.stdout.write(f"Imported {len(groups)} groups.")
+        logger.info(f"Imported {len(groups)} groups.")
 
     def import_types(self):
         df = self._download_csv(
             TYPES_URL, 
             ['typeID', 'groupID', 'typeName', 'description', 'mass', 'volume', 'capacity', 'iconID', 'published']
         )
-        self.stdout.write("Importing Eve Types (this may take a moment)...")
+        logger.info("Importing Eve Types (this may take a moment)...")
         
         EveType.objects.all().delete() # Clear old data
         
@@ -156,14 +183,14 @@ class Command(BaseCommand):
             )
 
         EveType.objects.bulk_create(types_to_create, batch_size=1000)
-        self.stdout.write(f"Imported {len(types_to_create)} types.")
+        logger.info(f"Imported {len(types_to_create)} types.")
 
     def import_dogma_attributes(self):
         df = self._download_csv(
             DOGMA_ATTRIBUTES_URL,
             ['attributeID', 'attributeName', 'description', 'iconID', 'unitID', 'displayName']
         )
-        self.stdout.write("Importing Dogma Attributes...")
+        logger.info("Importing Dogma Attributes...")
         
         EveDogmaAttribute.objects.all().delete() # Clear old data
         
@@ -178,7 +205,7 @@ class Command(BaseCommand):
             for _, row in df.iterrows()
         ]
         EveDogmaAttribute.objects.bulk_create(attributes, batch_size=1000)
-        self.stdout.write(f"Imported {len(attributes)} dogma attributes.")
+        logger.info(f"Imported {len(attributes)} dogma attributes.")
 
     def import_dogma_type_attributes(self):
         # --- *** THIS IS THE FIX *** ---
@@ -190,7 +217,7 @@ class Command(BaseCommand):
         df['value'] = df['valueInt'].fillna(df['valueFloat'])
         # --- *** END THE FIX *** ---
 
-        self.stdout.write("Importing Dogma Type Attributes (this is the big one)...")
+        logger.info("Importing Dogma Type Attributes (this is the big one)...")
         
         EveTypeDogmaAttribute.objects.all().delete() # Clear old data
         
@@ -211,11 +238,11 @@ class Command(BaseCommand):
                 )
 
         EveTypeDogmaAttribute.objects.bulk_create(type_attributes, batch_size=1000)
-        self.stdout.write(f"Imported {len(type_attributes)} type attribute links.")
+        logger.info(f"Imported {len(type_attributes)} type attribute links.")
 
     def import_dogma_type_effects(self):
         df = self._download_csv(DOGMA_EFFECTS_URL, ['typeID', 'effectID'])
-        self.stdout.write("Importing Dogma Type Effects (for module slots)...")
+        logger.info("Importing Dogma Type Effects (for module slots)...")
 
         # Get all types for FK mapping
         types = {t.type_id: t for t in EveType.objects.filter(group__category_id__in=[7, 18])} # Modules & Drones
@@ -232,7 +259,7 @@ class Command(BaseCommand):
                 type_obj.slot_type = 'drone'
                 types_to_update.append(type_obj)
         
-        self.stdout.write(f"Marked {len(types_to_update)} types as 'drone'.")
+        logger.info(f"Marked {len(types_to_update)} types as 'drone'.")
 
         # Modules
         for _, row in df.iterrows():
@@ -243,16 +270,16 @@ class Command(BaseCommand):
                     types_to_update.append(type_obj)
 
         EveType.objects.bulk_update(types_to_update, ['slot_type'], batch_size=1000)
-        self.stdout.write(f"Updated {len(types_to_update)} module slot types.")
+        logger.info(f"Updated {len(types_to_update) - len(drone_group_ids)} module slot types.")
 
     def populate_evetype_helpers(self):
-        self.stdout.write("Populating EveType helper fields (slots, meta level)...")
+        logger.info("Populating EveType helper fields (slots, meta level)...")
         
         # Use raw SQL for this bulk update, it's much faster
         
         with connection.cursor() as cursor:
             for field_name, attr_id in DOGMA_ATTR_IDS.items():
-                self.stdout.write(f"  - Populating '{field_name}' from attribute {attr_id}...")
+                logger.info(f"  - Populating '{field_name}' from attribute {attr_id}...")
                 
                 # --- *** THIS IS THE FIX *** ---
                 # The previous SQL (UPDATE...FROM) was for PostgreSQL.
@@ -269,8 +296,8 @@ class Command(BaseCommand):
                 )
                 # --- *** END THE FIX *** ---
                 
-                self.stdout.write(f"    ...updated {rowcount} rows.")
+                logger.info(f"    ...updated {rowcount} rows.")
         
         # Set meta_level to 0 for any items that are still NULL
         updated = EveType.objects.filter(meta_level__isnull=True).update(meta_level=0)
-        self.stdout.write(f"  - Set {updated} NULL meta_levels to 0.")
+        logger.info(f"  - Set {updated} NULL meta_levels to 0.")

@@ -20,6 +20,16 @@ from bravado.exception import HTTPNotFound
 from django.db import transaction # --- NEW: Import transaction ---
 
 # ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
+# ---
 # --- NEW: is_fleet_commander helper (copied from waitlist.views) ---
 # ---
 def is_fleet_commander(user):
@@ -52,10 +62,12 @@ def get_refreshed_token_for_character(user, character):
         ).order_by('-created').first()
         
         if not token:
+            logger.warning(f"No ESI token found for character {character.character_id}")
             raise Token.DoesNotExist
 
         # --- MODIFIED: Check for None *before* comparing to timezone.now()
         if not character.token_expiry or character.token_expiry < timezone.now():
+            logger.info(f"Refreshing ESI token for {character.character_name} ({character.character_id})")
             token.refresh()
             character.access_token = token.access_token
             character.token_expiry = token.expires # .expires is added in-memory by .refresh()
@@ -63,6 +75,7 @@ def get_refreshed_token_for_character(user, character):
             # --- NEW: Refresh public data on token refresh ---
             esi = EsiClientProvider()
             try:
+                logger.debug(f"Refreshing public data for {character.character_id}")
                 public_data = esi.client.Character.get_characters_character_id(
                     character_id=character.character_id
                 ).results()
@@ -85,6 +98,7 @@ def get_refreshed_token_for_character(user, character):
                         ).results()
                         alliance_name = alliance_data.get('name')
                     except HTTPNotFound:
+                        logger.warning(f"Could not find alliance {alliance_id} for char {character.character_id} (dead alliance?)")
                         alliance_name = "N/A" # Handle dead alliances
                 
                 # Update character model
@@ -92,29 +106,34 @@ def get_refreshed_token_for_character(user, character):
                 character.corporation_name = corp_name
                 character.alliance_id = alliance_id
                 character.alliance_name = alliance_name
+                logger.debug(f"Public data refreshed for {character.character_id}")
                 
             except Exception as e:
-                print(f"Error refreshing public data for {character.character_id}: {e}")
+                logger.error(f"Error refreshing public data for {character.character_id}: {e}", exc_info=True)
             # --- END NEW ---
             
             character.save()
+            logger.info(f"Token refreshed successfully for {character.character_name}")
             
         return token
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 400:
             # Refresh token is invalid. Delete token and character.
+            logger.error(f"ESI token refresh failed for {character.character_name}. Token is invalid/revoked. Deleting character.")
             if 'token' in locals() and token:
                 token.delete()
             character.delete()
             return None # Will cause a redirect
         else:
+            logger.error(f"ESI HTTPError during token refresh for {character.character_name}: {e}")
             raise e # Re-raise other ESI errors
     except Token.DoesNotExist:
+        logger.warning(f"Token.DoesNotExist raised for {character.character_name}")
         return None # Will cause a redirect
     except Exception as e:
         # --- ADDED: Catch any other errors (like TypeError)
-        print(f"Error in get_refreshed_token_for_character: {e}")
+        logger.error(f"Error in get_refreshed_token_for_character for {character.character_name}: {e}", exc_info=True)
         return None # Fail safely
     # --- END FIX ---
 # --- END HELPER FUNCTION ---
@@ -129,12 +148,14 @@ def pilot_detail(request, character_id):
     """
     
     esi = EsiClientProvider()
+    logger.debug(f"User {request.user.username} viewing pilot_detail for char {character_id}")
     character = get_object_or_404(EveCharacter, character_id=character_id, user=request.user)
     
     # 1. Get and refresh token (this is fast)
     token = get_refreshed_token_for_character(request.user, character)
     if not token:
         # Token was invalid, helper logged user out
+        logger.warning(f"Token refresh failed for {character.character_name}, logging user {request.user.username} out.")
         logout(request)
         return redirect('esi_auth:login')
 
@@ -143,6 +164,8 @@ def pilot_detail(request, character_id):
     available_scopes = set(s.name for s in token.scopes.all())
     has_all_scopes = all(scope in available_scopes for scope in required_scopes)
     if not has_all_scopes:
+        missing = [s for s in required_scopes if s not in available_scopes]
+        logger.warning(f"User {request.user.username} missing scopes for {character.character_name}: {missing}. Redirecting to login.")
         return redirect(f"{resolve_url('esi_auth:login')}?scopes=regular")
 
     # 3. Get snapshot and check if it's stale
@@ -150,8 +173,10 @@ def pilot_detail(request, character_id):
     
     needs_update = False
     if created or snapshot.last_updated < (timezone.now() - timedelta(hours=1)):
+        logger.debug(f"Snapshot for {character.character_name} is stale or was just created.")
         needs_update = True
     if not snapshot.skills_json or not snapshot.implants_json:
+        logger.debug(f"Snapshot for {character.character_name} is missing skill/implant data.")
         needs_update = True
         
     # --- THIS VIEW NO LONGER RUNS THE ESI UPDATE ---
@@ -159,6 +184,7 @@ def pilot_detail(request, character_id):
     # to the new api_refresh_pilot view.
             
     # --- SDE & GROUPING LOGIC (This is fast, it reads from our DB) ---
+    logger.debug(f"Loading skills from snapshot for {character.character_name}")
     grouped_skills = {}
     skills_list = snapshot.get_skills()
     if skills_list:
@@ -181,10 +207,12 @@ def pilot_detail(request, character_id):
                     'level': skill['active_skill_level']
                 })
     sorted_grouped_skills = dict(sorted(grouped_skills.items()))
+    logger.debug(f"Loaded {len(skills_list)} skills into {len(sorted_grouped_skills)} groups")
     # --- END SDE & GROUPING LOGIC ---
 
 
     # --- IMPLANT LOGIC (This is fast, it reads from our DB) ---
+    logger.debug(f"Loading implants from snapshot for {character.character_name}")
     all_implant_ids = snapshot.get_implant_ids()
     enriched_implants = []
     if all_implant_ids:
@@ -214,6 +242,7 @@ def pilot_detail(request, character_id):
             implants_col2.append(implant)
         else:
             implants_other.append(implant)
+    logger.debug(f"Loaded {len(enriched_implants)} implants")
     # --- END IMPLANT LOGIC ---
 
     # --- NEW: Context logic for Main/Alts ---
@@ -254,8 +283,10 @@ def api_refresh_pilot(request, character_id):
     """
     
     if request.method != 'POST': # Only allow POST requests
+        logger.warning(f"api_refresh_pilot called with GET by {request.user.username}")
         return HttpResponseBadRequest("Invalid request method")
 
+    logger.info(f"User {request.user.username} triggering ESI refresh for char {character_id}")
     esi = EsiClientProvider()
     character = get_object_or_404(EveCharacter, character_id=character_id, user=request.user)
     
@@ -263,23 +294,27 @@ def api_refresh_pilot(request, character_id):
     token = get_refreshed_token_for_character(request.user, character)
     if not token:
         # User's token is invalid
+        logger.error(f"api_refresh_pilot: Token refresh failed for {character_id}, logging user out")
         logout(request)
         return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
         
     # --- ALL SLOW ESI LOGIC IS NOW HERE ---
     try:
         # 2. Fetch fresh snapshot data from ESI
+        logger.debug(f"Fetching /skills/ for {character_id}")
         skills_response = esi.client.Skills.get_characters_character_id_skills(
             character_id=character_id,
             token=token.access_token
         ).results()
 
+        logger.debug(f"Fetching /implants/ for {character_id}")
         implants_response = esi.client.Clones.get_characters_character_id_implants(
             character_id=character_id,
             token=token.access_token
         ).results()
         
         # --- NEW: Get public data ---
+        logger.debug(f"Fetching public data for {character_id}")
         public_data = esi.client.Character.get_characters_character_id(
             character_id=character_id
         ).results()
@@ -302,12 +337,15 @@ def api_refresh_pilot(request, character_id):
                 ).results()
                 alliance_name = alliance_data.get('name')
             except HTTPNotFound:
+                logger.warning(f"Could not find alliance {alliance_id} for char {character_id} (dead alliance?)")
                 alliance_name = "N/A" # Handle dead alliances
         # --- END NEW ---
 
         if 'skills' not in skills_response or 'total_sp' not in skills_response:
+            logger.error(f"Invalid skills response for {character_id}: {skills_response}")
             raise Exception(f"Invalid skills response: {skills_response}")
         if not isinstance(implants_response, list):
+            logger.error(f"Invalid implants response for {character_id}: {implants_response}")
             raise Exception(f"Invalid implants response: {implants_response}")
 
         # 3. Save the fresh snapshot
@@ -315,6 +353,7 @@ def api_refresh_pilot(request, character_id):
         snapshot.skills_json = json.dumps(skills_response)
         snapshot.implants_json = json.dumps(implants_response)
         snapshot.save() # This also updates 'last_updated'
+        logger.info(f"Snapshot for {character_id} saved to DB")
         
         # --- NEW: Save corp/alliance data ---
         character.corporation_id = corp_id
@@ -322,17 +361,20 @@ def api_refresh_pilot(request, character_id):
         character.alliance_id = alliance_id
         character.alliance_name = alliance_name
         character.save()
+        logger.info(f"Corp/Alliance data for {character_id} saved to DB")
         # --- END NEW ---
         
         # 4. Perform SDE Caching (the other slow part)
         
         # --- Cache Skills SDE ---
+        logger.debug(f"Caching SDE for skills for {character_id}")
         skills_list = snapshot.get_skills()
         all_skill_ids = [s['skill_id'] for s in skills_list]
         cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
         
         cached_type_ids = set(EveType.objects.filter(type_id__in=all_skill_ids).values_list('type_id', flat=True))
         missing_skill_ids = [sid for sid in all_skill_ids if sid not in cached_type_ids]
+        logger.debug(f"Found {len(missing_skill_ids)} missing skill types to cache")
 
         for skill_id in missing_skill_ids:
             try:
@@ -349,6 +391,7 @@ def api_refresh_pilot(request, character_id):
                         try:
                             category = EveCategory.objects.get(category_id=category_id)
                         except EveCategory.DoesNotExist:
+                            logger.warning(f"Could not find Category {category_id} for Group {group_id}")
                             pass # Will be created if SDE importer ran
                     # --- END FIX ---
                     group = EveGroup.objects.create(
@@ -357,6 +400,7 @@ def api_refresh_pilot(request, character_id):
                         category_id=category_id
                     )
                     cached_groups[group.group_id] = group
+                    logger.debug(f"Cached new group: {group.name}")
                 
                 slot = None
                 if 'dogma_attributes' in type_data:
@@ -367,13 +411,17 @@ def api_refresh_pilot(request, character_id):
                             break
                 
                 EveType.objects.create(type_id=skill_id, name=type_data['name'], group=group, slot=slot)
-            except Exception:
+                logger.debug(f"Cached new skill type: {type_data['name']}")
+            except Exception as e:
+                logger.error(f"Failed to cache SDE for skill_id {skill_id}: {e}", exc_info=True)
                 continue # Skip this one skill
         
         # --- Cache Implants SDE ---
+        logger.debug(f"Caching SDE for implants for {character_id}")
         all_implant_ids = snapshot.get_implant_ids()
         cached_type_ids = set(EveType.objects.filter(type_id__in=all_implant_ids).values_list('type_id', flat=True))
         missing_implant_ids = [iid for iid in all_implant_ids if iid not in cached_type_ids]
+        logger.debug(f"Found {len(missing_implant_ids)} missing implant types to cache")
 
         for implant_id in missing_implant_ids:
             try:
@@ -390,6 +438,7 @@ def api_refresh_pilot(request, character_id):
                         try:
                             category = EveCategory.objects.get(category_id=category_id)
                         except EveCategory.DoesNotExist:
+                            logger.warning(f"Could not find Category {category_id} for Group {group_id}")
                             pass # Will be created if SDE importer ran
                     # --- END FIX ---
                     group = EveGroup.objects.create(
@@ -398,6 +447,7 @@ def api_refresh_pilot(request, character_id):
                         category_id=category_id
                     )
                     cached_groups[group.group_id] = group
+                    logger.debug(f"Cached new group: {group.name}")
                 
                 slot = None
                 if 'dogma_attributes' in type_data:
@@ -408,14 +458,18 @@ def api_refresh_pilot(request, character_id):
                             break
                         
                 EveType.objects.create(type_id=implant_id, name=type_data['name'], group=group, slot=slot)
-            except Exception:
+                logger.debug(f"Cached new implant type: {type_data['name']}")
+            except Exception as e:
+                logger.error(f"Failed to cache SDE for implant_id {implant_id}: {e}", exc_info=True)
                 continue # Skip this one implant
 
         # 5. All done, send success
+        logger.info(f"ESI refresh complete for {character_id}")
         return JsonResponse({"status": "success"})
 
     except Exception as e:
         # Something went wrong during the ESI calls
+        logger.error(f"Unexpected error in api_refresh_pilot for {character_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
@@ -427,27 +481,33 @@ def api_get_implants(request):
     for the X-Up modal.
     """
     character_id = request.GET.get('character_id')
+    logger.debug(f"User {request.user.username} getting implants for X-Up modal (char {character_id})")
     if not character_id:
+        logger.warning(f"api_get_implants: Missing character_id")
         return HttpResponseBadRequest("Missing character_id")
 
     try:
         character = EveCharacter.objects.get(character_id=character_id, user=request.user)
     except EveCharacter.DoesNotExist:
+        logger.warning(f"api_get_implants: User {request.user.username} tried to get implants for char {character_id} they don't own")
         return JsonResponse({"status": "error", "message": "Character not found or not yours."}, status=403)
 
     esi = EsiClientProvider()
     token = get_refreshed_token_for_character(request.user, character)
     if not token:
         logout(request)
+        logger.error(f"api_get_implants: Token refresh failed for {character_id}, logging user out")
         # --- THIS IS THE FIX: The text 'Check for correct scope' was mangled with the status code.
         return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
     
     # Check for correct scope
     if 'esi-clones.read_implants.v1' not in [s.name for s in token.scopes.all()]:
+        logger.warning(f"api_get_implants: User {request.user.username} missing 'esi-clones.read_implants.v1' for {character_id}")
         return JsonResponse({"status": "error", "message": "Missing 'esi-clones.read_implants.v1' scope."}, status=403)
 
     try:
         # --- Make ESI call and get headers ---
+        logger.debug(f"Fetching /implants/ for {character_id} (X-Up modal)")
         implants_op = esi.client.Clones.get_characters_character_id_implants(
             character_id=character_id,
             token=token.access_token
@@ -472,8 +532,10 @@ def api_get_implants(request):
         else:
             expires_dt = timezone.now() + timedelta(minutes=2) # Fallback
             expires_iso = expires_dt.isoformat()
+        logger.debug(f"Implant cache for {character_id} expires: {expires_iso}")
 
         if not isinstance(implants_response, list):
+            logger.error(f"Invalid implants response for {character_id} (X-Up modal): {implants_response}")
             raise Exception("Invalid implants response")
 
         # --- SDE & Grouping Logic (same as pilot_detail) ---
@@ -492,6 +554,8 @@ def api_get_implants(request):
                 cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
                 
                 missing_ids = [iid for iid in all_implant_ids if iid not in cached_types]
+                if missing_ids:
+                     logger.debug(f"Caching SDE for {len(missing_ids)} missing implants (X-Up modal)")
                 for implant_id in missing_ids:
                     try:
                         type_data = esi.client.Universe.get_universe_types_type_id(type_id=implant_id).results()
@@ -506,6 +570,7 @@ def api_get_implants(request):
                                 try:
                                     category = EveCategory.objects.get(category_id=category_id)
                                 except EveCategory.DoesNotExist:
+                                    logger.warning(f"Could not find Category {category_id} for Group {group_id}")
                                     pass # Will be created if SDE importer ran
                             # --- END FIX ---
                             group = EveGroup.objects.create(
@@ -514,6 +579,7 @@ def api_get_implants(request):
                                 category_id=category_id
                             )
                             cached_groups[group.group_id] = group
+                            logger.debug(f"Cached new group: {group.name}")
                         
                         slot = None
                         if 'dogma_attributes' in type_data:
@@ -525,7 +591,9 @@ def api_get_implants(request):
                         
                         new_type = EveType.objects.create(type_id=implant_id, name=type_data['name'], group=group, slot=slot)
                         cached_types[implant_id] = new_type
+                        logger.debug(f"Cached new implant type: {new_type.name}")
                     except Exception:
+                        logger.error(f"Failed to cache SDE for implant_id {implant_id}", exc_info=True)
                         continue # Skip this implant
                 # --- End SDE Cache ---
 
@@ -539,7 +607,7 @@ def api_get_implants(request):
                         })
         except Exception as e:
             # Log the SDE error to the console but don't crash the request
-            print(f"ERROR: Failed to cache SDE for implants in api_get_implants: {e}")
+            logger.error(f"ERROR: Failed to cache SDE for implants in api_get_implants: {e}", exc_info=True)
             # The 'enriched_implants' list will be empty, which is fine.
         # --- END FIX ---
 
@@ -570,6 +638,7 @@ def api_get_implants(request):
             html = render_to_string('_implant_list.html', context)
         except Exception as e:
             # This will catch TemplateDoesNotExist or other rendering errors
+            logger.error(f"Failed to render _implant_list.html: {e}", exc_info=True)
             return JsonResponse({
                 "status": "error", 
                 "message": f"Template rendering failed: {str(e)}"
@@ -577,6 +646,7 @@ def api_get_implants(request):
         # --- END MODIFICATION ---
         
         # Return the HTML and the expiry time
+        logger.debug(f"Successfully served implants for {character_id} (X-Up modal)")
         return JsonResponse({
             "status": "success",
             "html": html,
@@ -585,6 +655,7 @@ def api_get_implants(request):
 
     except Exception as e:
         # This catches ESI errors, token errors, etc.
+        logger.error(f"Error in api_get_implants for {character_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
@@ -598,7 +669,9 @@ def api_set_main_character(request):
     Sets a new main character for the logged-in user.
     """
     character_id = request.POST.get('character_id')
+    logger.info(f"User {request.user.username} setting main character to {character_id}")
     if not character_id:
+        logger.warning(f"api_set_main_character: Missing character_id")
         return JsonResponse({"status": "error", "message": "Missing character_id."}, status=400)
         
     try:
@@ -618,11 +691,14 @@ def api_set_main_character(request):
             new_main.is_main = True
             new_main.save()
             
+            logger.info(f"User {request.user.username} successfully set {new_main.character_name} as main")
             return JsonResponse({"status": "success", "message": f"{new_main.character_name} is now your main character."})
 
     except EveCharacter.DoesNotExist:
+        logger.warning(f"api_set_main_character: User {request.user.username} tried to set non-existent/unowned char {character_id}")
         return JsonResponse({"status": "error", "message": "Character not found or does not belong to you."}, status=404)
     except Exception as e:
+        logger.error(f"Error in api_set_main_character: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 # ---
 # --- END NEW API

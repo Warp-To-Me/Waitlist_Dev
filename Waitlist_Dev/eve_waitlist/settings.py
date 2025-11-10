@@ -210,3 +210,65 @@ ESI_SSO_SCOPES_FC = [
 
 # This setting tells Django which domain to use for session cookies.
 # We set it to 127.0.0.1 to prevent the "two-domain" bug
+
+
+# ---
+# --- NEW: LOGGING CONFIGURATION
+# ---
+LOGGING = {
+    'version': 1,
+    # Keep existing loggers working
+    'disable_existing_loggers': False,
+    
+    # Define the format of the log message
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    
+    # Define where the log messages go
+    'handlers': {
+        'console': {
+            'level': 'DEBUG', # Show DEBUG and higher messages
+            'class': 'logging.StreamHandler', # Send to console
+            'formatter': 'verbose' # Use the 'verbose' format
+        },
+    },
+    
+    # Define which loggers to use
+    'loggers': {
+        # This is the root logger. It catches everything.
+        '': {
+            'handlers': ['console'],
+            'level': 'INFO', # Root level is INFO
+            'propagate': True,
+        },
+        # This logger is specific to our 'waitlist' app
+        'waitlist': {
+            'handlers': ['console'],
+            'level': 'DEBUG', # Show DEBUG messages for our app
+            'propagate': False, # Don't send to root logger
+        },
+        # This logger is specific to our 'pilot' app
+        'pilot': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        # This logger is specific to our 'esi_auth' app
+        'esi_auth': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
+# ---
+# --- END NEW LOGGING
+# ---

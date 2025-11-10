@@ -15,6 +15,17 @@ from .models import (
 # --- END MODIFIED ---
 
 # ---
+# --- NEW: Import logging
+# ---
+import logging
+# Get a logger for this specific Python file
+logger = logging.getLogger(__name__)
+# ---
+# --- END NEW LOGGING IMPORT
+# ---
+
+
+# ---
 # --- *** REMOVED ALL ESI-CACHING FUNCTIONS *** ---
 # - get_or_cache_eve_group
 # - _get_dogma_value
@@ -42,6 +53,7 @@ def parse_eft_fit(raw_fit_original: str):
     
     lines_raw = raw_fit_no_nbsp.splitlines()
     if not lines_raw:
+        logger.warning("Fit parsing failed: Fit is empty")
         raise ValueError("Fit is empty.")
     
     first_line_index = -1
@@ -54,15 +66,18 @@ def parse_eft_fit(raw_fit_original: str):
             break
             
     if first_line_index == -1:
+        logger.warning("Fit parsing failed: Fit contains only whitespace")
         raise ValueError("Fit contains only whitespace.")
 
     # 2. Manually parse the header
     header_match = re.match(r'^\[([^,]+),\s*(.*?)\]$', header_line)
     if not header_match:
+        logger.warning(f"Fit parsing failed: Invalid header: {header_line}")
         raise ValueError("Could not find valid header. Fit must start with [Ship, Fit Name].")
         
     ship_name_raw = header_match.group(1).strip()
     if not ship_name_raw:
+        logger.warning(f"Fit parsing failed: Ship name in header is empty: {header_line}")
         raise ValueError("Ship name in header is empty.")
 
     tag_stripper = re.compile(r'<[^>]+>')
@@ -72,7 +87,10 @@ def parse_eft_fit(raw_fit_original: str):
     try:
         ship_type = EveType.objects.select_related('group').get(name__iexact=ship_name)
     except EveType.DoesNotExist:
+        logger.warning(f"Fit parsing failed: Ship hull '{ship_name}' not found in SDE")
         raise ValueError(f"Ship hull '{ship_name}' could not be found in local SDE. Is SDE imported?")
+    
+    logger.debug(f"Parsing fit for ship: {ship_type.name} ({ship_type.type_id})")
     
     # 4. Parse all items in the fit
     parsed_fit_list = [] # For storing JSON
@@ -148,6 +166,7 @@ def parse_eft_fit(raw_fit_original: str):
         # This is an item
         match = item_regex.match(stripped_line)
         if not match:
+            logger.warning(f"Fit parsing: Could not parse line: '{stripped_line}'")
             parsed_fit_list.append({
                 "raw_line": stripped_line, "type_id": None, "name": f"Unknown line: {stripped_line}",
                 "icon_url": None, "quantity": 0, "final_slot": 'cargo'
@@ -164,6 +183,7 @@ def parse_eft_fit(raw_fit_original: str):
         try:
             item_type = EveType.objects.get(name__iexact=item_name)
         except EveType.DoesNotExist:
+             logger.warning(f"Fit parsing failed: Unknown item '{item_name}'")
              raise ValueError(f"Unknown item in fit: '{item_name}'. Is SDE imported?")
         
         if item_type:
@@ -201,7 +221,8 @@ def parse_eft_fit(raw_fit_original: str):
         else:
             # This case is now handled by the try/except block
             pass
-
+            
+    logger.debug(f"Fit parsed successfully for {ship_type.name}. {len(parsed_fit_list)} total lines, {len(fit_summary_counter)} unique items.")
     return ship_type, parsed_fit_list, fit_summary_counter
 
 
@@ -216,12 +237,15 @@ def parse_eft_to_full_doctrine_data(raw_fit_original: str):
     
     --- MODIFIED: This now calls the centralized SDE parser ---
     """
+    logger.debug("Admin: Parsing EFT fit to create/update doctrine")
     try:
         ship_type, parsed_fit_list, fit_summary_counter = parse_eft_fit(raw_fit_original)
         # Return all three components
+        logger.info(f"Admin: Successfully parsed doctrine fit for {ship_type.name}")
         return ship_type, dict(fit_summary_counter), json.dumps(parsed_fit_list)
     except ValueError as e:
         # Re-raise as a generic exception for the admin form
+        logger.warning(f"Admin: Failed to parse doctrine fit: {e}")
         raise Exception(str(e))
 # --- END MODIFIED FUNCTION ---
 
@@ -239,6 +263,7 @@ def _get_attribute_value_from_item(item_type: EveType, attribute_id: int) -> flo
     """
     if not hasattr(item_type, '_attribute_cache'):
         # This is a fallback, but should not be hit in production
+        logger.warning(f"_get_attribute_value_from_item fallback for {item_type.name} (attr {attribute_id})")
         try:
             attr_obj = EveTypeDogmaAttribute.objects.get(type=item_type, attribute_id=attribute_id)
             return attr_obj.value or 0
@@ -260,12 +285,16 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
     --- *** MODIFIED: Now uses SDE-backed ItemComparisonRule logic *** ---
     """
     if not ship_type_id:
+        logger.debug("check_fit_against_doctrines: No ship_type_id provided")
         return None, 'PENDING', ShipFit.FitCategory.NONE
 
     # --- 1. Get all doctrines for this hull ---
     matching_doctrines = DoctrineFit.objects.filter(ship_type__type_id=ship_type_id)
     if not matching_doctrines.exists():
+        logger.debug(f"check_fit_against_doctrines: No doctrines found for ship_type_id {ship_type_id}")
         return None, 'PENDING', ShipFit.FitCategory.NONE # No doctrines for this hull
+        
+    logger.debug(f"Checking fit against {matching_doctrines.count()} doctrines for ship {ship_type_id}")
 
     # --- 2. Build the manual substitution map ---
     # { 'base_item_id_str': {set of allowed_ids_int} }
@@ -276,6 +305,7 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
         allowed_ids = {sub.type_id for sub in group.substitutes.all()}
         allowed_ids.add(group.base_item_id) # The base item is always allowed
         sub_map[base_id_str] = allowed_ids
+    logger.debug(f"Loaded {len(sub_map)} manual substitution groups")
 
 
     # --- 3. Get all EveType data for ALL items in ONE query ---
@@ -289,6 +319,7 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
         t.type_id: t 
         for t in EveType.objects.filter(type_id__in=all_type_ids).select_related('group', 'group__category')
     }
+    logger.debug(f"Loaded {len(type_map)} unique EveTypes from DB for comparison")
     
     # --- *** NEW: Pre-cache all attributes for these types *** ---
     # This is a massive optimization. We fetch all dogma attributes for all
@@ -306,6 +337,7 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
     # Now, attach this cache to each EveType object
     for type_id, item_type in type_map.items():
         item_type._attribute_cache = attribute_values_by_type.get(type_id, {})
+    logger.debug(f"Pre-cached {len(dogma_attrs)} dogma attributes for comparison")
     # --- *** END NEW *** ---
 
     # --- *** NEW: Get all ItemComparisonRules in one query *** ---
@@ -315,12 +347,14 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
         if rule.group_id not in rules_by_group:
             rules_by_group[rule.group_id] = []
         rules_by_group[rule.group_id].append(rule)
+    logger.debug(f"Loaded {len(all_rules)} automatic comparison rules")
     # --- *** END NEW *** ---
 
     # --- 4. Loop through each doctrine and check for a match ---
     submitted_items_to_use = Counter({str(k): v for k, v in submitted_fit_summary.items()})
 
     for doctrine in matching_doctrines:
+        logger.debug(f"--- Checking against doctrine: {doctrine.name} ---")
         doctrine_items_to_match = Counter(doctrine.get_fit_items())
         submitted_items_snapshot = submitted_items_to_use.copy()
         fit_matches_doctrine = True
@@ -332,6 +366,7 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
             doctrine_item_type = type_map.get(doctrine_type_id)
 
             if not doctrine_item_type or not doctrine_item_type.group:
+                logger.warning(f"Doctrine {doctrine.name} item {doctrine_type_id_str} not in type_map. Skipping check.")
                 fit_matches_doctrine = False
                 break 
 
@@ -346,42 +381,44 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
             # 2. Get Automatic "Equal or Better" Substitutions
             
             comparison_rules = rules_by_group.get(doctrine_item_type.group_id, [])
-
-            for submitted_id_str, qty in submitted_items_snapshot.items():
-                submitted_item_id = int(submitted_id_str)
-                
-                if submitted_item_id in allowed_ids_for_slot:
-                    continue 
-
-                submitted_item_type = type_map.get(submitted_item_id)
-                
-                if not submitted_item_type or not submitted_item_type.group:
-                    continue
-                
-                # --- Run the "Equal or Better" check ---
-                if (submitted_item_type.group_id == doctrine_item_type.group_id and
-                    submitted_item_type.group.category_id == doctrine_item_type.group.category_id):
+            
+            if comparison_rules: # Only run this logic if rules exist for this group
+                logger.debug(f"Found {len(comparison_rules)} auto-sub rules for group {doctrine_item_type.group.name}")
+                for submitted_id_str, qty in submitted_items_snapshot.items():
+                    submitted_item_id = int(submitted_id_str)
                     
-                    if not comparison_rules:
+                    if submitted_item_id in allowed_ids_for_slot:
                         continue 
-                        
-                    is_equal_or_better = True
-                    for rule in comparison_rules:
-                        # --- *** Use the new helper that reads from the cache *** ---
-                        doctrine_val = _get_attribute_value_from_item(doctrine_item_type, rule.attribute.attribute_id)
-                        submitted_val = _get_attribute_value_from_item(submitted_item_type, rule.attribute.attribute_id)
-                        
-                        if rule.higher_is_better:
-                            if submitted_val < doctrine_val:
-                                is_equal_or_better = False
-                                break 
-                        else:
-                            if submitted_val > doctrine_val:
-                                is_equal_or_better = False
-                                break 
+
+                    submitted_item_type = type_map.get(submitted_item_id)
                     
-                    if is_equal_or_better:
-                        allowed_ids_for_slot.add(submitted_item_id)
+                    if not submitted_item_type or not submitted_item_type.group:
+                        continue
+                    
+                    # --- Run the "Equal or Better" check ---
+                    if (submitted_item_type.group_id == doctrine_item_type.group_id and
+                        submitted_item_type.group.category_id == doctrine_item_type.group.category_id):
+                        
+                        is_equal_or_better = True
+                        for rule in comparison_rules:
+                            # --- *** Use the new helper that reads from the cache *** ---
+                            doctrine_val = _get_attribute_value_from_item(doctrine_item_type, rule.attribute.attribute_id)
+                            submitted_val = _get_attribute_value_from_item(submitted_item_type, rule.attribute.attribute_id)
+                            
+                            if rule.higher_is_better:
+                                if submitted_val < doctrine_val:
+                                    logger.debug(f"Auto-sub failed for {submitted_item_type.name}: {rule.attribute.name} is {submitted_val} (need >= {doctrine_val})")
+                                    is_equal_or_better = False
+                                    break 
+                            else:
+                                if submitted_val > doctrine_val:
+                                    logger.debug(f"Auto-sub failed for {submitted_item_type.name}: {rule.attribute.name} is {submitted_val} (need <= {doctrine_val})")
+                                    is_equal_or_better = False
+                                    break 
+                        
+                        if is_equal_or_better:
+                            logger.debug(f"Auto-sub success: {submitted_item_type.name} accepted for {doctrine_item_type.name}")
+                            allowed_ids_for_slot.add(submitted_item_id)
             # --- *** END MODIFICATION *** ---
 
             # --- 5b. Consume items from the snapshot ---
@@ -405,6 +442,7 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
             
             # --- 5c. Check if we found enough ---
             if found_quantity < required_quantity:
+                logger.debug(f"Fit failed doctrine {doctrine.name}: Missing item. Need {required_quantity} of {doctrine_item_type.name} (or sub), found {found_quantity}")
                 fit_matches_doctrine = False
                 break 
 
@@ -415,17 +453,21 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
         ship_type_id_str = str(ship_type_id)
         if ship_type_id_str in submitted_items_snapshot:
             if submitted_items_snapshot[ship_type_id_str] > doctrine_items_to_match.get(ship_type_id_str, 0):
+                 logger.debug(f"Fit failed doctrine {doctrine.name}: Extra ship hull item found")
                  fit_matches_doctrine = False
             del submitted_items_snapshot[ship_type_id_str]
         
         if len(submitted_items_snapshot) > 0:
+            logger.debug(f"Fit failed doctrine {doctrine.name}: Extra items found: {submitted_items_snapshot}")
             fit_matches_doctrine = False
             continue 
 
         # --- 7. Perfect Match! ---
+        logger.info(f"Fit PERFECTLY matched doctrine {doctrine.name}. Approving with category {doctrine.category}")
         return doctrine, 'APPROVED', doctrine.category
 
     # Looped through all doctrines, no perfect match found.
+    logger.info(f"Fit for ship {ship_type_id} did not match any doctrines. Setting to PENDING.")
     return None, 'PENDING', ShipFit.FitCategory.NONE
 # --- END MODIFIED HELPER ---
 
@@ -452,7 +494,7 @@ def parse_and_validate_fit(ship_fit: ShipFit):
     # 2. Compare against FitCheckRule models associated with the waitlist
     # 3. Check character skills via ESI
     
-    print(f"Placeholder: Validating fit {ship_fit.id} for {character.character_name}...")
+    logger.debug(f"Placeholder: Validating fit {ship_fit.id} for {character.character_name}...")
     
     # Example placeholder logic
     if "Shield Booster" not in raw_text:
