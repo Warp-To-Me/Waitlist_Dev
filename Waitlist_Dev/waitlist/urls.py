@@ -1,56 +1,32 @@
 from django.urls import path
-from . import views
+# Import all three view modules
+from . import views, fc_views, api_views
 
 app_name = 'waitlist'
 
 urlpatterns = [
-    # Point the root URL to our new dynamic view
+    # --- Main views (from views.py) ---
     path('', views.home, name='home'),
-    
-    # --- NEW: Fittings Page URL ---
     path('fittings/', views.fittings_view, name='fittings_view'),
-    
-    # --- NEW FC ADMIN URLS ---
-    path('fc_admin/', views.fc_admin_view, name='fc_admin'),
-    path('api/fc_manage_waitlist/', views.api_fc_manage_waitlist, name='api_fc_manage_waitlist'),
-    
-    # --- EXISTING API URLs ---
     path('api/submit_fit/', views.api_submit_fit, name='api_submit_fit'),
     path('api/update_fit_status/', views.api_update_fit_status, name='api_update_fit_status'),
     path('api/get_waitlist_html/', views.api_get_waitlist_html, name='api_get_waitlist_html'),
-    
-    # --- API for FC Fit Modal ---
-    path('api/get_fit_details/', views.api_get_fit_details, name='api_get_fit_details'),
 
-    # --- NEW: API for Doctrine Fit Modal ---
-    path('api/get_doctrine_fit_details/', views.api_get_doctrine_fit_details, name='api_get_doctrine_fit_details'),
-    
-    # --- NEW API FOR ADDING SUBSTITUTIONS ---
-    path('api/add_substitution/', views.api_add_substitution, name='api_add_substitution'),
-    
-    # ---
-    # --- NEW API URLS FOR FLEET MANAGEMENT ---
-    # ---
-    path('api/get_fleet_structure/', views.api_get_fleet_structure, name='api_get_fleet_structure'),
-    path('api/save_squad_mappings/', views.api_save_squad_mappings, name='api_save_squad_mappings'),
-    path('api/fc_invite_pilot/', views.api_fc_invite_pilot, name='api_fc_invite_pilot'),
-    # --- NEW: API for creating the layout ---
-    path('api/fc_create_default_layout/', views.api_fc_create_default_layout, name='api_fc_create_default_layout'),
-    # ---
-    # --- NEW: API for adding/deleting squads ---
-    # ---
-    path('api/fc_add_squad/', views.api_fc_add_squad, name='api_fc_add_squad'),
-    path('api/fc_delete_squad/', views.api_fc_delete_squad, name='api_fc_delete_squad'),
-    # ---
-    # --- NEW: API for adding/deleting wings ---
-    # ---
-    path('api/fc_add_wing/', views.api_fc_add_wing, name='api_fc_add_wing'),
-    path('api/fc_delete_wing/', views.api_fc_delete_wing, name='api_fc_delete_wing'),
-    # ---
-    # --- NEW: API for refreshing structure ---
-    # ---
-    path('api/fc_refresh_structure/', views.api_fc_refresh_structure, name='api_fc_refresh_structure'),
-    # ---
-    # --- END NEW API URLS ---
-    # ---
+    # --- FC Admin views (from fc_views.py) ---
+    path('fc_admin/', fc_views.fc_admin_view, name='fc_admin'),
+    path('api/fc_manage_waitlist/', fc_views.api_fc_manage_waitlist, name='api_fc_manage_waitlist'),
+    path('api/get_fleet_structure/', fc_views.api_get_fleet_structure, name='api_get_fleet_structure'),
+    path('api/save_squad_mappings/', fc_views.api_save_squad_mappings, name='api_save_squad_mappings'),
+    path('api/fc_invite_pilot/', fc_views.api_fc_invite_pilot, name='api_fc_invite_pilot'),
+    path('api/fc_create_default_layout/', fc_views.api_fc_create_default_layout, name='api_fc_create_default_layout'),
+    path('api/fc_add_squad/', fc_views.api_fc_add_squad, name='api_fc_add_squad'),
+    path('api/fc_delete_squad/', fc_views.api_fc_delete_squad, name='api_fc_delete_squad'),
+    path('api/fc_add_wing/', fc_views.api_fc_add_wing, name='api_fc_add_wing'),
+    path('api/fc_delete_wing/', fc_views.api_fc_delete_wing, name='api_fc_delete_wing'),
+    path('api/fc_refresh_structure/', fc_views.api_fc_refresh_structure, name='api_fc_refresh_structure'),
+
+    # --- API / Fit views (from api_views.py) ---
+    path('api/get_fit_details/', api_views.api_get_fit_details, name='api_get_fit_details'),
+    path('api/get_doctrine_fit_details/', api_views.api_get_doctrine_fit_details, name='api_get_doctrine_fit_details'),
+    path('api/add_substitution/', api_views.api_add_substitution, name='api_add_substitution'),
 ]
