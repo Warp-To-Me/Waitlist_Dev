@@ -41,6 +41,7 @@ so they can be correctly injected into the base.html <head>.
         align-items: center;
         gap: 20px;
         flex-grow: 1; /* Allow it to grow */
+        position: relative; /* For refresh button */
     }
 
         .header-info img {
@@ -96,12 +97,48 @@ so they can be correctly injected into the base.html <head>.
         margin-top: 25px;
     }
 
+        /* --- MODIFICATION: Make section header a flex container --- */
         .section h2 {
             border-bottom: 0px solid #444;
             padding-bottom: 10px;
             font-size: 1.8em;
             color: #fff;
+            display: flex; /* New */
+            justify-content: space-between; /* New */
+            align-items: center; /* New */
         }
+    /* --- END MODIFICATION --- */
+
+    /* --- NEW: Refresh Button Style --- */
+    .btn-refresh {
+        background: #555;
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        font-size: 1.2em;
+        /* line-height: 1; <-- REMOVED to improve centering */
+        padding: 0; /* <-- ADDED to ensure no extra padding */
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-refresh:hover {
+            background: #666;
+            transform: rotate(90deg);
+        }
+
+    /* Positioning for the public data refresh button */
+    #btn-refresh-public {
+        position: absolute;
+        top: 0;
+        right: 0;
+    }
+    /* --- END NEW --- */
 
     /* --- IMPLANT STYLES --- */
     .implant-other-list {
@@ -409,6 +446,9 @@ so they can be correctly injected into the base.html <head>.
                 </div>
                 <!-- --- END NEW --- -->
             </div>
+            <!-- --- NEW: Public Data Refresh Button --- -->
+            <button class="btn-refresh" id="btn-refresh-public" data-section="public" title="Refresh Corp/Alliance Info">&#8635;</button>
+            <!-- --- END NEW --- -->
         </div>
         <!-- --- END MODIFICATION --- -->
         <!-- --- NEW: ALT MANAGEMENT CARD (MOVED) --- -->
@@ -438,7 +478,12 @@ so they can be correctly injected into the base.html <head>.
     </div>
 
     <div class="section">
-        <h2>Implants</h2>
+        <!-- --- MODIFICATION: Added refresh button --- -->
+        <h2>
+            Implants
+            <button class="btn-refresh" data-section="implants" title="Refresh Implants">&#8635;</button>
+        </h2>
+        <!-- --- END MODIFICATION --- -->
 
         <ul class="implant-other-list">
             {% for implant in implants_other %}
@@ -492,7 +537,12 @@ so they can be correctly injected into the base.html <head>.
     </div>
 
     <div class="section">
-        <h2>Skills</h2>
+        <!-- --- MODIFICATION: Added refresh button --- -->
+        <h2>
+            Skills
+            <button class="btn-refresh" data-section="skills" title="Refresh Skills">&#8635;</button>
+        </h2>
+        <!-- --- END MODIFICATION --- -->
 
         <div class="skill-grid-container">
             {% for group_name, skill_list in grouped_skills.items %}
@@ -526,19 +576,19 @@ so they can be correctly injected into the base.html <head>.
 <script>
         document.addEventListener('DOMContentLoaded', () => {
             const needsRefresh = {{ needs_refresh|yesno:"true,false" }};
+            const refreshUrl = "{% url 'pilot:api_refresh_pilot' character.character_id %}";
+            const csrfToken = "{{ csrf_token }}";
+            const overlay = document.getElementById('loading-overlay');
+            const loadingText = document.getElementById('loading-text');
 
+            // --- 1. Automatic "All" Refresh ---
             if (needsRefresh) {
-                const overlay = document.getElementById('loading-overlay');
-                // --- NEW: Update loading text ---
-                const loadingText = document.getElementById('loading-text');
+                // --- MODIFIED: Update loading text ---
                 loadingText.textContent = 'Refreshing ESI Data... (Skills, Implants, Corp)';
-                // --- END NEW ---
+                // --- END MODIFICATION ---
                 overlay.classList.add('show');
 
-                const refreshUrl = "{% url 'pilot:api_refresh_pilot' character.character_id %}";
-                const csrfToken = "{{ csrf_token }}";
-
-                fetch(refreshUrl, {
+                fetch(refreshUrl, { // Calls with default section=all
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': csrfToken,
@@ -562,7 +612,43 @@ so they can be correctly injected into the base.html <head>.
                 });
             }
 
-            // --- NEW: Alt Management Button Listeners ---
+            // --- 2. NEW: Manual Granular Refresh Buttons ---
+            document.querySelectorAll('.btn-refresh').forEach(button => {
+                button.addEventListener('click', () => {
+                    const section = button.dataset.section;
+                    if (!section) return;
+
+                    // Show overlay
+                    loadingText.textContent = `Refreshing ${section}...`;
+                    overlay.classList.add('show');
+
+                    // Call the refresh API with the specific section
+                    fetch(`${refreshUrl}?section=${section}`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // Success, just reload the page
+                            window.location.reload();
+                        } else {
+                            throw new Error(data.message || 'Refresh failed.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Granular Refresh Error:', error);
+                        overlay.innerHTML = `<p style="color: #ff8a8a;">Error refreshing ${section} data.</p>`;
+                        // Keep overlay open to show error
+                    });
+                });
+            });
+
+
+            // --- 3. Alt Management Button Listeners ---
             const altContainer = document.getElementById('alt-list-container');
             if (altContainer) {
                 altContainer.addEventListener('click', (event) => {

@@ -21,8 +21,19 @@ class EveTypeAdmin(admin.ModelAdmin):
     list_filter = ('published', 'group__category__name', 'group__name')
     autocomplete_fields = ('group',) # Add autocomplete
 
-# We can also register the snapshot if you want to see it
+# Register the snapshot to view in admin
 @admin.register(PilotSnapshot)
 class PilotSnapshotAdmin(admin.ModelAdmin):
     list_display = ('character', 'last_updated', 'get_total_sp')
     search_fields = ('character__character_name',)
+    readonly_fields = ('character', 'skills_json', 'implants_json', 'last_updated')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Allow changing, but fields are read-only
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        return True

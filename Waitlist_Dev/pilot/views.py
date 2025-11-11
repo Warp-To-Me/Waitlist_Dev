@@ -242,18 +242,120 @@ def pilot_detail(request, character_id):
     return render(request, 'pilot_detail.html', context)
 
 
+# --- NEW HELPER FUNCTION FOR SDE CACHING ---
+def _cache_missing_eve_types(type_ids_to_check: list):
+    """
+    Checks a list of type IDs against the local SDE (EveType table)
+    and fetches any missing ones from ESI.
+    """
+    if not type_ids_to_check:
+        return
+
+    logger.debug(f"Checking/caching {len(type_ids_to_check)} EveType IDs...")
+    
+    # Use set for efficient lookup
+    type_ids_set = set(type_ids_to_check)
+    
+    # Find which types are already in our database
+    cached_type_ids = set(EveType.objects.filter(
+        type_id__in=type_ids_set
+    ).values_list('type_id', flat=True))
+    
+    # Determine which IDs are missing
+    missing_ids = list(type_ids_set - cached_type_ids)
+    
+    if not missing_ids:
+        logger.debug("All EveTypes are already cached.")
+        return
+
+    logger.info(f"Found {len(missing_ids)} missing EveTypes to cache from ESI.")
+    
+    esi = EsiClientProvider()
+    
+    # Pre-fetch all groups from our DB to avoid multiple queries in the loop
+    cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
+    
+    for type_id in missing_ids:
+        try:
+            # 1. Fetch type data from ESI
+            type_data = esi.client.Universe.get_universe_types_type_id(type_id=type_id).results()
+            
+            # 2. Find or create its group
+            group_id = type_data['group_id']
+            group = cached_groups.get(group_id)
+            
+            if not group:
+                logger.debug(f"Caching new group {group_id} for type {type_id}")
+                group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
+                category_id = group_data.get('category_id')
+                
+                # Try to get category from DB
+                category = None
+                if category_id:
+                    try:
+                        category = EveCategory.objects.get(category_id=category_id)
+                    except EveCategory.DoesNotExist:
+                        logger.warning(f"Could not find Category {category_id} for Group {group_id} while caching type {type_id}. This is fine if SDE is not fully imported.")
+                        pass # Category might not exist if SDE import hasn't run
+                
+                group = EveGroup.objects.create(
+                    group_id=group_id, 
+                    name=group_data['name'],
+                    category=category, # Link to category if found
+                    published=group_data.get('published', True)
+                )
+                cached_groups[group.group_id] = group # Add to our in-memory cache
+                logger.debug(f"Cached new group: {group.name}")
+
+            # 3. Get implant slot (Dogma Attr 300) if it exists
+            slot = None
+            if 'dogma_attributes' in type_data:
+                for attr in type_data['dogma_attributes']:
+                    if attr['attribute_id'] == 300: # 300 = implantSlot
+                        slot = int(attr['value'])
+                        break
+            
+            # 4. Create the new EveType in our database
+            EveType.objects.create(
+                type_id=type_id, 
+                name=type_data['name'], 
+                group=group, 
+                slot=slot, # Will be None if not an implant
+                published=type_data.get('published', True),
+                description=type_data.get('description'),
+                mass=type_data.get('mass'),
+                volume=type_data.get('volume'),
+                capacity=type_data.get('capacity'),
+                icon_id=type_data.get('icon_id'),
+            )
+            logger.debug(f"Cached new EveType: {type_data['name']} (ID: {type_id})")
+
+        except Exception as e:
+            logger.error(f"Failed to cache SDE for type_id {type_id}: {e}", exc_info=True)
+            continue # Skip this one type and continue the loop
+
+# --- END NEW HELPER FUNCTION ---
+
+
 @login_required
 def api_refresh_pilot(request, character_id):
     """
     This view runs in the background to fetch and cache all
     ESI data (snapshot and SDE) for a character.
+    
+    MODIFIED: Now accepts a '?section=' parameter to refresh
+    only 'skills', 'implants', 'public', or 'all'.
     """
+    
+    # --- MODIFICATION: Check for section parameter ---
+    # Default to 'all' if no section is specified (for the auto-refresh)
+    section = request.GET.get('section', 'all')
     
     if request.method != 'POST': # Only allow POST requests
         logger.warning(f"api_refresh_pilot called with GET by {request.user.username}")
         return HttpResponseBadRequest("Invalid request method")
 
-    logger.info(f"User {request.user.username} triggering ESI refresh for char {character_id}")
+    logger.info(f"User {request.user.username} triggering ESI refresh for char {character_id} (section: {section})")
     esi = EsiClientProvider()
     character = get_object_or_404(EveCharacter, character_id=character_id, user=request.user)
     
@@ -266,163 +368,88 @@ def api_refresh_pilot(request, character_id):
         return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
         
     try:
-        # 2. Fetch fresh snapshot data from ESI
-        logger.debug(f"Fetching /skills/ for {character_id}")
-        skills_response = esi.client.Skills.get_characters_character_id_skills(
-            character_id=character_id,
-            token=token.access_token
-        ).results()
-
-        logger.debug(f"Fetching /implants/ for {character_id}")
-        implants_response = esi.client.Clones.get_characters_character_id_implants(
-            character_id=character_id,
-            token=token.access_token
-        ).results()
+        # --- MODIFICATION: Granular refresh logic ---
         
-        logger.debug(f"Fetching public data for {character_id}")
-        public_data = esi.client.Character.get_characters_character_id(
-            character_id=character_id
-        ).results()
-        
-        corp_id = public_data.get('corporation_id')
-        alliance_id = public_data.get('alliance_id')
-        
-        corp_name = None
-        if corp_id:
-            corp_data = esi.client.Corporation.get_corporations_corporation_id(
-                corporation_id=corp_id
-            ).results()
-            corp_name = corp_data.get('name')
-            
-        alliance_name = None
-        if alliance_id:
-            try:
-                alliance_data = esi.client.Alliance.get_alliances_alliance_id(
-                    alliance_id=alliance_id
-                ).results()
-                alliance_name = alliance_data.get('name')
-            except HTTPNotFound:
-                logger.warning(f"Could not find alliance {alliance_id} for char {character_id} (dead alliance?)")
-                alliance_name = "N/A" # Handle dead alliances
-
-        if 'skills' not in skills_response or 'total_sp' not in skills_response:
-            logger.error(f"Invalid skills response for {character_id}: {skills_response}")
-            raise Exception(f"Invalid skills response: {skills_response}")
-        if not isinstance(implants_response, list):
-            logger.error(f"Invalid implants response for {character_id}: {implants_response}")
-            raise Exception(f"Invalid implants response: {implants_response}")
-
-        # 3. Save the fresh snapshot
         snapshot, created = PilotSnapshot.objects.get_or_create(character=character)
-        snapshot.skills_json = json.dumps(skills_response)
-        snapshot.implants_json = json.dumps(implants_response)
+        all_type_ids_to_cache = set()
+
+        # 2a. Fetch Skills
+        if section == 'all' or section == 'skills':
+            logger.debug(f"Fetching /skills/ for {character_id}")
+            skills_response = esi.client.Skills.get_characters_character_id_skills(
+                character_id=character_id,
+                token=token.access_token
+            ).results()
+            if 'skills' not in skills_response or 'total_sp' not in skills_response:
+                logger.error(f"Invalid skills response for {character_id}: {skills_response}")
+                raise Exception(f"Invalid skills response: {skills_response}")
+            
+            snapshot.skills_json = json.dumps(skills_response)
+            all_type_ids_to_cache.update(s['skill_id'] for s in skills_response.get('skills', []))
+            logger.info(f"Skills snapshot updated for {character_id}")
+
+        # 2b. Fetch Implants
+        if section == 'all' or section == 'implants':
+            logger.debug(f"Fetching /implants/ for {character_id}")
+            implants_response = esi.client.Clones.get_characters_character_id_implants(
+                character_id=character_id,
+                token=token.access_token
+            ).results()
+            if not isinstance(implants_response, list):
+                logger.error(f"Invalid implants response for {character_id}: {implants_response}")
+                raise Exception(f"Invalid implants response: {implants_response}")
+
+            snapshot.implants_json = json.dumps(implants_response)
+            all_type_ids_to_cache.update(implants_response)
+            logger.info(f"Implants snapshot updated for {character_id}")
+
+        # 2c. Fetch Public Data (Corp/Alliance)
+        if section == 'all' or section == 'public':
+            logger.debug(f"Fetching public data for {character_id}")
+            public_data = esi.client.Character.get_characters_character_id(
+                character_id=character_id
+            ).results()
+            
+            corp_id = public_data.get('corporation_id')
+            alliance_id = public_data.get('alliance_id')
+            
+            corp_name = None
+            if corp_id:
+                corp_data = esi.client.Corporation.get_corporations_corporation_id(
+                    corporation_id=corp_id
+                ).results()
+                corp_name = corp_data.get('name')
+                
+            alliance_name = None
+            if alliance_id:
+                try:
+                    alliance_data = esi.client.Alliance.get_alliances_alliance_id(
+                        alliance_id=alliance_id
+                    ).results()
+                    alliance_name = alliance_data.get('name')
+                except HTTPNotFound:
+                    logger.warning(f"Could not find alliance {alliance_id} for char {character.character_id} (dead alliance?)")
+                    alliance_name = "N/A" # Handle dead alliances
+
+            # Save corp/alliance data
+            character.corporation_id = corp_id
+            character.corporation_name = corp_name
+            character.alliance_id = alliance_id
+            character.alliance_name = alliance_name
+            character.save()
+            logger.info(f"Corp/Alliance data for {character_id} saved to DB")
+
+        # 3. Save the snapshot with any new JSON
         snapshot.save() # This also updates 'last_updated'
-        logger.info(f"Snapshot for {character_id} saved to DB")
         
-        # Save corp/alliance data
-        character.corporation_id = corp_id
-        character.corporation_name = corp_name
-        character.alliance_id = alliance_id
-        character.alliance_name = alliance_name
-        character.save()
-        logger.info(f"Corp/Alliance data for {character_id} saved to DB")
-        
-        # 4. Perform SDE Caching (the other slow part)
-        
-        # Cache Skills SDE
-        logger.debug(f"Caching SDE for skills for {character_id}")
-        skills_list = snapshot.get_skills()
-        all_skill_ids = [s['skill_id'] for s in skills_list]
-        cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
-        
-        cached_type_ids = set(EveType.objects.filter(type_id__in=all_skill_ids).values_list('type_id', flat=True))
-        missing_skill_ids = [sid for sid in all_skill_ids if sid not in cached_type_ids]
-        logger.debug(f"Found {len(missing_skill_ids)} missing skill types to cache")
-
-        for skill_id in missing_skill_ids:
-            try:
-                type_data = esi.client.Universe.get_universe_types_type_id(type_id=skill_id).results()
-                group_id = type_data['group_id']
-                group = cached_groups.get(group_id)
-                
-                if not group:
-                    group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                    category_id = group_data.get('category_id')
-                    category = None
-                    if category_id:
-                        try:
-                            category = EveCategory.objects.get(category_id=category_id)
-                        except EveCategory.DoesNotExist:
-                            logger.warning(f"Could not find Category {category_id} for Group {group_id}")
-                            pass # Will be created if SDE importer ran
-                    group = EveGroup.objects.create(
-                        group_id=group_id, 
-                        name=group_data['name'],
-                        category_id=category_id
-                    )
-                    cached_groups[group.group_id] = group
-                    logger.debug(f"Cached new group: {group.name}")
-                
-                slot = None
-                if 'dogma_attributes' in type_data:
-                    for attr in type_data['dogma_attributes']:
-                        if attr['attribute_id'] == 300: # Dogma Attr for implant slot
-                            slot = int(attr['value']); 
-                            break
-                
-                EveType.objects.create(type_id=skill_id, name=type_data['name'], group=group, slot=slot)
-                logger.debug(f"Cached new skill type: {type_data['name']}")
-            except Exception as e:
-                logger.error(f"Failed to cache SDE for skill_id {skill_id}: {e}", exc_info=True)
-                continue # Skip this one skill
-        
-        # Cache Implants SDE
-        logger.debug(f"Caching SDE for implants for {character_id}")
-        all_implant_ids = snapshot.get_implant_ids()
-        cached_type_ids = set(EveType.objects.filter(type_id__in=all_implant_ids).values_list('type_id', flat=True))
-        missing_implant_ids = [iid for iid in all_implant_ids if iid not in cached_type_ids]
-        logger.debug(f"Found {len(missing_implant_ids)} missing implant types to cache")
-
-        for implant_id in missing_implant_ids:
-            try:
-                type_data = esi.client.Universe.get_universe_types_type_id(type_id=implant_id).results()
-                group_id = type_data['group_id']
-                group = cached_groups.get(group_id)
-
-                if not group:
-                    group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                    category_id = group_data.get('category_id')
-                    category = None
-                    if category_id:
-                        try:
-                            category = EveCategory.objects.get(category_id=category_id)
-                        except EveCategory.DoesNotExist:
-                            logger.warning(f"Could not find Category {category_id} for Group {group_id}")
-                            pass
-                    group = EveGroup.objects.create(
-                        group_id=group_id, 
-                        name=group_data['name'],
-                        category_id=category_id
-                    )
-                    cached_groups[group.group_id] = group
-                    logger.debug(f"Cached new group: {group.name}")
-                
-                slot = None
-                if 'dogma_attributes' in type_data:
-                    for attr in type_data['dogma_attributes']:
-                        if attr['attribute_id'] == 300: # Dogma Attr for implant slot
-                            slot = int(attr['value']); 
-                            break
-                        
-                EveType.objects.create(type_id=implant_id, name=type_data['name'], group=group, slot=slot)
-                logger.debug(f"Cached new implant type: {type_data['name']}")
-            except Exception as e:
-                logger.error(f"Failed to cache SDE for implant_id {implant_id}: {e}", exc_info=True)
-                continue # Skip this one implant
+        # 4. Perform SDE Caching for any new types we found
+        if all_type_ids_to_cache:
+            _cache_missing_eve_types(list(all_type_ids_to_cache))
+        # --- END MODIFICATION ---
 
         # 5. All done, send success
-        logger.info(f"ESI refresh complete for {character_id}")
-        return JsonResponse({"status": "success"})
+        logger.info(f"ESI refresh complete for {character_id} (section: {section})")
+        return JsonResponse({"status": "success", "section": section})
 
     except Exception as e:
         # Something went wrong during the ESI calls
@@ -470,7 +497,12 @@ def api_get_implants(request):
         implants_response = implants_op.results()
         
         # Get Expiry header
-        expires_str = implants_op.header.get('Expires', [None])[0]
+        # --- THIS IS THE FIX ---
+        # The .header attribute is on the *result* of the future,
+        # which is accessed via `.future.result().header` after `.results()` is called.
+        expires_str = implants_op.future.result().header.get('Expires', [None])[0]
+        # --- END THE FIX ---
+        
         expires_dt = None
         expires_iso = None
         if expires_str:
@@ -490,56 +522,22 @@ def api_get_implants(request):
             logger.error(f"Invalid implants response for {character_id} (X-Up modal): {implants_response}")
             raise Exception("Invalid implants response")
 
-        # SDE & Grouping Logic (same as pilot_detail)
+        # --- REFACTORED SDE & GROUPING LOGIC ---
         all_implant_ids = implants_response # Response is just a list of IDs
         enriched_implants = []
         
         try:
             if all_implant_ids:
-                # We MUST cache missing SDE data here
-                cached_types = {t.type_id: t for t in EveType.objects.filter(type_id__in=all_implant_ids).select_related('group')}
-                cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
+                # 1. Call the helper to cache any missing implant types
+                _cache_missing_eve_types(all_implant_ids)
                 
-                missing_ids = [iid for iid in all_implant_ids if iid not in cached_types]
-                if missing_ids:
-                     logger.debug(f"Caching SDE for {len(missing_ids)} missing implants (X-Up modal)")
-                for implant_id in missing_ids:
-                    try:
-                        type_data = esi.client.Universe.get_universe_types_type_id(type_id=implant_id).results()
-                        group_id = type_data['group_id']
-                        group = cached_groups.get(group_id)
-                        if not group:
-                            group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                            category_id = group_data.get('category_id')
-                            category = None
-                            if category_id:
-                                try:
-                                    category = EveCategory.objects.get(category_id=category_id)
-                                except EveCategory.DoesNotExist:
-                                    logger.warning(f"Could not find Category {category_id} for Group {group_id}")
-                                    pass
-                            group = EveGroup.objects.create(
-                                group_id=group_id, 
-                                name=group_data['name'],
-                                category_id=category_id
-                            )
-                            cached_groups[group.group_id] = group
-                            logger.debug(f"Cached new group: {group.name}")
-                        
-                        slot = None
-                        if 'dogma_attributes' in type_data:
-                            for attr in type_data['dogma_attributes']:
-                                if attr['attribute_id'] == 300: # Dogma Attr for implant slot
-                                    slot = int(attr['value']); 
-                                    break
-                        
-                        new_type = EveType.objects.create(type_id=implant_id, name=type_data['name'], group=group, slot=slot)
-                        cached_types[implant_id] = new_type
-                        logger.debug(f"Cached new implant type: {new_type.name}")
-                    except Exception:
-                        logger.error(f"Failed to cache SDE for implant_id {implant_id}", exc_info=True)
-                        continue # Skip this implant
+                # 2. Now, all types are guaranteed to be in our local DB.
+                #    Fetch them all in one query.
+                cached_types = {t.type_id: t for t in EveType.objects.filter(
+                    type_id__in=all_implant_ids
+                ).select_related('group')}
 
+                # 3. Enrich the implant list
                 for implant_id in all_implant_ids:
                     if implant_id in cached_types:
                         eve_type = cached_types[implant_id]
@@ -548,10 +546,16 @@ def api_get_implants(request):
                             'slot': eve_type.slot if eve_type.slot else 0,
                             'icon_url': f"https://images.evetech.net/types/{implant_id}/icon?size=32"
                         })
+                    else:
+                        # This should no longer happen, but good to log if it does
+                        logger.warning(f"EveType {implant_id} was not found in DB after caching attempt.")
+
         except Exception as e:
             # Log the SDE error to the console but don't crash the request
-            logger.error(f"ERROR: Failed to cache SDE for implants in api_get_implants: {e}", exc_info=True)
-            # The 'enriched_implants' list will be empty, which is fine.
+            logger.error(f"ERROR: Failed during implant enrichment in api_get_implants: {e}", exc_info=True)
+            # The 'enriched_implants' list will be empty or partial, which is fine.
+        
+        # --- END REFACTORED SDE & GROUPING LOGIC ---
         
         sorted_implants = sorted(enriched_implants, key=lambda i: i.get('slot', 0))
         
