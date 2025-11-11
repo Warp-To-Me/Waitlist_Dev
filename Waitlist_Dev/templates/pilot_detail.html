@@ -114,12 +114,12 @@ so they can be correctly injected into the base.html <head>.
         background: #555;
         color: #fff;
         border: none;
-        border-radius: 50%;
+        border-radius: 5px;
         width: 30px;
         height: 30px;
-        font-size: 1.2em;
-        /* line-height: 1; <-- REMOVED to improve centering */
-        padding: 0; /* <-- ADDED to ensure no extra padding */
+        font-size: 0.8em;
+        line-height: 1;
+        padding: 5px 8px;
         cursor: pointer;
         transition: background-color 0.2s, transform 0.2s;
         display: flex;
@@ -129,12 +129,12 @@ so they can be correctly injected into the base.html <head>.
 
         .btn-refresh:hover {
             background: #666;
-            transform: rotate(90deg);
         }
 
     /* Positioning for the public data refresh button */
     #btn-refresh-public {
         position: absolute;
+        font-size: 1.0em;
         top: 0;
         right: 0;
     }
