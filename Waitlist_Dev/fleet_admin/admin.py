@@ -10,7 +10,6 @@ from django.core.exceptions import ValidationError
 from waitlist.fit_parser import parse_eft_to_full_doctrine_data
 import json
 
-
 # We will control FC/Admin permissions via Django's User/Group system,
 # so we don't need a separate FleetCommander model registration for now.
 
@@ -99,7 +98,6 @@ class FleetWaitlistAdmin(admin.ModelAdmin):
         return obj.all_fits.filter(status='APPROVED').count()
     get_approved_count.short_description = "Approved Fits"
 
-
 class DoctrineFitForm(forms.ModelForm):
     """
     Custom form for the DoctrineFit admin to add an
@@ -151,7 +149,6 @@ class DoctrineFitForm(forms.ModelForm):
 
         return cleaned_data
 
-
 @admin.register(DoctrineFit)
 class DoctrineFitAdmin(admin.ModelAdmin):
     """
@@ -194,7 +191,6 @@ class DoctrineFitAdmin(admin.ModelAdmin):
             
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
 @admin.register(FitSubstitutionGroup)
 class FitSubstitutionGroupAdmin(admin.ModelAdmin):
     """
@@ -208,7 +204,6 @@ class FitSubstitutionGroupAdmin(admin.ModelAdmin):
     
     # Use a filter horizontal for a nice M2M interface
     filter_horizontal = ('substitutes',)
-
 
 # Register Fleet Structure Models
 class FleetSquadInline(admin.TabularInline):
@@ -229,7 +224,6 @@ class FleetSquadAdmin(admin.ModelAdmin):
     list_filter = ('wing__fleet', 'assigned_category')
     list_editable = ('assigned_category',)
 
-
 # Register new rule models
 @admin.register(EveDogmaAttribute)
 class EveDogmaAttributeAdmin(admin.ModelAdmin):
@@ -243,7 +237,6 @@ class ItemComparisonRuleAdmin(admin.ModelAdmin):
     list_filter = ('group__name', 'higher_is_better')
     # Add autocomplete for easier rule creation
     autocomplete_fields = ('group', 'attribute')
-
 
 # Register EveTypeDogmaAttribute (read-only)
 @admin.register(EveTypeDogmaAttribute)

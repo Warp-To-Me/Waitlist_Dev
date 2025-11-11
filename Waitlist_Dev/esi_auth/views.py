@@ -5,26 +5,19 @@ from django.contrib.auth import logout, login
 from django.contrib.auth.models import User
 # Import your EveCharacter model
 from waitlist.models import EveCharacter
-# --- END ---
 from django.conf import settings
 from urllib.parse import urlencode
 import secrets 
 from datetime import timezone, timedelta # Import for time calculations
-
 # Import the CallbackRedirect model from the esi library
 from esi.models import CallbackRedirect, Token
-
 # --- Import ESI client ---
 from esi.clients import EsiClientProvider
 from bravado.exception import HTTPNotFound
-# --- END ---
-
 # --- Import logging ---
 import logging
 # Get a logger for this specific Python file
 logger = logging.getLogger(__name__)
-# --- END ---
-
 
 try:
     # Import the real callback view from the esi library
@@ -74,7 +67,6 @@ def esi_login(request):
         # Default to regular scopes
         scopes_to_request = settings.ESI_SSO_SCOPES_REGULAR
         logger.debug(f"Requesting REGULAR scopes for session {request.session.session_key}")
-    # --- END ---
 
     params = {
         'response_type': 'code',
@@ -87,7 +79,6 @@ def esi_login(request):
     # 6. Redirect the user to EVE's login page
     logger.info(f"Redirecting session {request.session.session_key} to EVE SSO")
     return redirect(f"{authorize_url}?{urlencode(params)}")
-
 
 # This is our "Step 3" view
 def sso_complete_login(request):
@@ -214,7 +205,6 @@ def sso_complete_login(request):
                     user_account.is_staff = True
                     user_account.is_superuser = True
                 user_account.save() # Save the new user (with flags)
-
 
     # 6. Link the token to this user account.
     if esi_token.user is None:

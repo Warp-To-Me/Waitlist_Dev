@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 import pymysql
 pymysql.install_as_MySQLdb()
-
 from pathlib import Path
 import os # Make sure os is imported
 from dotenv import load_dotenv # Import load_dotenv
@@ -25,7 +24,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # This file should be in /Waitlist_Dev/.env
 load_dotenv(BASE_DIR / '.env')
 # --- End .env file ---
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -40,13 +38,10 @@ DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '180.181.208.178']
 
-
 # This tells Django to use our asgi.py file for ASGI servers
 ASGI_APPLICATION = 'eve_waitlist.asgi.application'
 
-
 # Application definition
-
 INSTALLED_APPS = [
     # 'daphne' must be first
     'daphne',
@@ -100,7 +95,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'eve_waitlist.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 # Load from .env
@@ -115,7 +109,6 @@ DATABASES = {
         'PORT': os.environ.get('DB_PORT'),
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -135,10 +128,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# We log the user in manually in esi_auth/views.py
-
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i1n/
 
@@ -149,7 +138,6 @@ TIME_ZONE = 'UTC'
 USE_I1N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
@@ -165,7 +153,6 @@ STATICFILES_DIRS = [
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
 
 # --- ESI / SSO SETTINGS ---
 
@@ -185,11 +172,9 @@ ESI_SSO_CALLBACK_URL = 'http://127.0.0.1:8000/auth/callback/'
 LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
 LOGOUT_REDIRECT_URL = '/'
 
-
 # This tells Django what the login URL is.
 # We point it to the 'login' view inside our 'esi_auth' app.
 LOGIN_URL = 'esi_auth:login'
-
 
 # Define two different sets of scopes.
 ESI_SSO_SCOPES_REGULAR = [
@@ -205,14 +190,7 @@ ESI_SSO_SCOPES_FC = [
 ]
 # Our esi_login view will now choose one of the two lists above.
 
-
-# This setting tells Django which domain to use for session cookies.
-# We set it to 127.0.0.1 to prevent the "two-domain" bug
-
-
-# ---
 # --- LOGGING CONFIGURATION
-# ---
 LOGGING = {
     'version': 1,
     # Keep existing loggers working
@@ -267,9 +245,6 @@ LOGGING = {
         },
     },
 }
-# ---
-# --- END NEW LOGGING
-# ---
 
 # This tells django-eventstream how to find the
 # channels layer to send/receive messages.
