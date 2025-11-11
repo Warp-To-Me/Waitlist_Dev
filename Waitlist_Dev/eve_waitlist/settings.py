@@ -41,9 +41,15 @@ DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '180.181.208.178']
 
 
+# This tells Django to use our asgi.py file for ASGI servers
+ASGI_APPLICATION = 'eve_waitlist.asgi.application'
+
+
 # Application definition
 
 INSTALLED_APPS = [
+    # 'daphne' must be first
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -58,6 +64,9 @@ INSTALLED_APPS = [
     'waitlist',
     'fleet_admin',
     'pilot',
+    # ASGI & Real-time apps
+    'channels',
+    'django_eventstream',
 ]
 
 MIDDLEWARE = [
@@ -127,15 +136,11 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# --- THE FIX ---
-# The AUTHENTICATION_BACKENDS section has been removed
-# as it was causing a ModuleNotFoundError.
-# We are now logging the user in manually in our view.
-# --- END FIX ---
+# We log the user in manually in esi_auth/views.py
 
 
 # Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
+# https://docs.djangoproject.com/en/5.0/topics/i1n/
 
 LANGUAGE_CODE = 'en-us'
 
@@ -186,10 +191,7 @@ LOGOUT_REDIRECT_URL = '/'
 LOGIN_URL = 'esi_auth:login'
 
 
-# --- THE FIX: Create multiple scope lists ---
-
-# This tells django-esi what scopes to ask for on login.
-# We will define two different sets of scopes.
+# Define two different sets of scopes.
 ESI_SSO_SCOPES_REGULAR = [
     'esi-skills.read_skills.v1',
     'esi-clones.read_implants.v1',
@@ -201,11 +203,7 @@ ESI_SSO_SCOPES_FC = [
     'esi-fleets.read_fleet.v1',
     'esi-fleets.write_fleet.v1',
 ]
-
-# We are removing the old, single ESI_SSO_SCOPES variable.
 # Our esi_login view will now choose one of the two lists above.
-
-# --- END FIX ---
 
 
 # This setting tells Django which domain to use for session cookies.
@@ -213,7 +211,7 @@ ESI_SSO_SCOPES_FC = [
 
 
 # ---
-# --- NEW: LOGGING CONFIGURATION
+# --- LOGGING CONFIGURATION
 # ---
 LOGGING = {
     'version': 1,
@@ -272,3 +270,7 @@ LOGGING = {
 # ---
 # --- END NEW LOGGING
 # ---
+
+# This tells django-eventstream how to find the
+# channels layer to send/receive messages.
+CHANNEL_MANAGER = 'django_eventstream.channelmanager.ChannelsChannelManager'

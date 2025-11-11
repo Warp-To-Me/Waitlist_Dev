@@ -5,56 +5,36 @@ from django.utils import timezone
 from datetime import timedelta, datetime # --- Import datetime ---
 import json
 import requests # For handling HTTP errors during refresh
-# --- NEW IMPORT ---
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
-from django.template.loader import render_to_string # --- NEW IMPORT ---
-from django.views.decorators.http import require_POST # --- THIS IS THE FIX ---
+from django.template.loader import render_to_string
+from django.views.decorators.http import require_POST
 
 from waitlist.models import EveCharacter
 from .models import PilotSnapshot, EveGroup, EveType, EveCategory
 
 from esi.clients import EsiClientProvider
 from esi.models import Token
-# --- NEW: Import ESI exceptions ---
 from bravado.exception import HTTPNotFound
-from django.db import transaction # --- NEW: Import transaction ---
+from django.db import transaction
 
-# ---
-# --- NEW: Import logging
-# ---
 import logging
-# Get a logger for this specific Python file
 logger = logging.getLogger(__name__)
-# ---
-# --- END NEW LOGGING IMPORT
-# ---
 
-# ---
-# --- NEW: is_fleet_commander helper (copied from waitlist.views) ---
-# ---
+
 def is_fleet_commander(user):
     """
     Checks if a user is in the 'Fleet Commander' group.
     """
     return user.groups.filter(name='Fleet Commander').exists()
-# ---
-# --- END NEW HELPER
-# ---
 
 
 # --- HELPER FUNCTION: GET AND REFRESH TOKEN ---
-# We need this logic in both views, so let's make it a helper
 def get_refreshed_token_for_character(user, character):
     """
     Fetches and, if necessary, refreshes the ESI token for a character.
     Handles auth failure by logging the user out.
     Returns the valid Token object or None if a redirect is needed.
     """
-    # ---
-    # --- THE FIX IS HERE ---
-    # ---
-    # We wrap the entire function in a generic try/except to catch
-    # unexpected errors (like TypeError) and fail safely by returning None.
     try:
         token = Token.objects.filter(
             user=user, 
@@ -65,14 +45,13 @@ def get_refreshed_token_for_character(user, character):
             logger.warning(f"No ESI token found for character {character.character_id}")
             raise Token.DoesNotExist
 
-        # --- MODIFIED: Check for None *before* comparing to timezone.now()
         if not character.token_expiry or character.token_expiry < timezone.now():
             logger.info(f"Refreshing ESI token for {character.character_name} ({character.character_id})")
             token.refresh()
             character.access_token = token.access_token
             character.token_expiry = token.expires # .expires is added in-memory by .refresh()
             
-            # --- NEW: Refresh public data on token refresh ---
+            # Refresh public data on token refresh
             esi = EsiClientProvider()
             try:
                 logger.debug(f"Refreshing public data for {character.character_id}")
@@ -110,7 +89,6 @@ def get_refreshed_token_for_character(user, character):
                 
             except Exception as e:
                 logger.error(f"Error refreshing public data for {character.character_id}: {e}", exc_info=True)
-            # --- END NEW ---
             
             character.save()
             logger.info(f"Token refreshed successfully for {character.character_name}")
@@ -132,10 +110,8 @@ def get_refreshed_token_for_character(user, character):
         logger.warning(f"Token.DoesNotExist raised for {character.character_name}")
         return None # Will cause a redirect
     except Exception as e:
-        # --- ADDED: Catch any other errors (like TypeError)
         logger.error(f"Error in get_refreshed_token_for_character for {character.character_name}: {e}", exc_info=True)
         return None # Fail safely
-    # --- END FIX ---
 # --- END HELPER FUNCTION ---
 
 
@@ -179,11 +155,9 @@ def pilot_detail(request, character_id):
         logger.debug(f"Snapshot for {character.character_name} is missing skill/implant data.")
         needs_update = True
         
-    # --- THIS VIEW NO LONGER RUNS THE ESI UPDATE ---
-    # The 'if needs_update:' block of ESI calls has been MOVED
-    # to the new api_refresh_pilot view.
+    # This view no longer runs the ESI update, it just sets the flag.
             
-    # --- SDE & GROUPING LOGIC (This is fast, it reads from our DB) ---
+    # SDE & GROUPING LOGIC (This is fast, it reads from our DB)
     logger.debug(f"Loading skills from snapshot for {character.character_name}")
     grouped_skills = {}
     skills_list = snapshot.get_skills()
@@ -208,10 +182,8 @@ def pilot_detail(request, character_id):
                 })
     sorted_grouped_skills = dict(sorted(grouped_skills.items()))
     logger.debug(f"Loaded {len(skills_list)} skills into {len(sorted_grouped_skills)} groups")
-    # --- END SDE & GROUPING LOGIC ---
 
-
-    # --- IMPLANT LOGIC (This is fast, it reads from our DB) ---
+    # IMPLANT LOGIC (This is fast, it reads from our DB)
     logger.debug(f"Loading implants from snapshot for {character.character_name}")
     all_implant_ids = snapshot.get_implant_ids()
     enriched_implants = []
@@ -243,14 +215,12 @@ def pilot_detail(request, character_id):
         else:
             implants_other.append(implant)
     logger.debug(f"Loaded {len(enriched_implants)} implants")
-    # --- END IMPLANT LOGIC ---
 
-    # --- NEW: Context logic for Main/Alts ---
+    # Context logic for Main/Alts
     all_user_chars = request.user.eve_characters.all().order_by('character_name')
     main_char = all_user_chars.filter(is_main=True).first()
     if not main_char:
         main_char = all_user_chars.first()
-    # --- END NEW ---
 
     context = {
         'character': character,
@@ -261,20 +231,17 @@ def pilot_detail(request, character_id):
         'snapshot_time': snapshot.last_updated,
         'portrait_url': f"https://images.evetech.net/characters/{character.character_id}/portrait?size=256",
         'grouped_skills': sorted_grouped_skills,
-        'needs_refresh': needs_update, # <-- Pass the flag!
+        'needs_refresh': needs_update, # Pass the flag!
         
-        # --- NEW CONTEXT ---
         'is_fc': is_fleet_commander(request.user), # For base template
         'user_characters': all_user_chars, # For X-Up modal
         'all_chars_for_header': all_user_chars, # For header dropdown
         'main_char_for_header': main_char, # For header dropdown
-        # --- END NEW CONTEXT ---
     }
     
     return render(request, 'pilot_detail.html', context)
 
 
-# --- NEW API VIEW ---
 @login_required
 def api_refresh_pilot(request, character_id):
     """
@@ -298,7 +265,6 @@ def api_refresh_pilot(request, character_id):
         logout(request)
         return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
         
-    # --- ALL SLOW ESI LOGIC IS NOW HERE ---
     try:
         # 2. Fetch fresh snapshot data from ESI
         logger.debug(f"Fetching /skills/ for {character_id}")
@@ -313,7 +279,6 @@ def api_refresh_pilot(request, character_id):
             token=token.access_token
         ).results()
         
-        # --- NEW: Get public data ---
         logger.debug(f"Fetching public data for {character_id}")
         public_data = esi.client.Character.get_characters_character_id(
             character_id=character_id
@@ -339,7 +304,6 @@ def api_refresh_pilot(request, character_id):
             except HTTPNotFound:
                 logger.warning(f"Could not find alliance {alliance_id} for char {character_id} (dead alliance?)")
                 alliance_name = "N/A" # Handle dead alliances
-        # --- END NEW ---
 
         if 'skills' not in skills_response or 'total_sp' not in skills_response:
             logger.error(f"Invalid skills response for {character_id}: {skills_response}")
@@ -355,18 +319,17 @@ def api_refresh_pilot(request, character_id):
         snapshot.save() # This also updates 'last_updated'
         logger.info(f"Snapshot for {character_id} saved to DB")
         
-        # --- NEW: Save corp/alliance data ---
+        # Save corp/alliance data
         character.corporation_id = corp_id
         character.corporation_name = corp_name
         character.alliance_id = alliance_id
         character.alliance_name = alliance_name
         character.save()
         logger.info(f"Corp/Alliance data for {character_id} saved to DB")
-        # --- END NEW ---
         
         # 4. Perform SDE Caching (the other slow part)
         
-        # --- Cache Skills SDE ---
+        # Cache Skills SDE
         logger.debug(f"Caching SDE for skills for {character_id}")
         skills_list = snapshot.get_skills()
         all_skill_ids = [s['skill_id'] for s in skills_list]
@@ -384,7 +347,6 @@ def api_refresh_pilot(request, character_id):
                 
                 if not group:
                     group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                    # --- FIX: Need to get category first ---
                     category_id = group_data.get('category_id')
                     category = None
                     if category_id:
@@ -393,7 +355,6 @@ def api_refresh_pilot(request, character_id):
                         except EveCategory.DoesNotExist:
                             logger.warning(f"Could not find Category {category_id} for Group {group_id}")
                             pass # Will be created if SDE importer ran
-                    # --- END FIX ---
                     group = EveGroup.objects.create(
                         group_id=group_id, 
                         name=group_data['name'],
@@ -405,8 +366,7 @@ def api_refresh_pilot(request, character_id):
                 slot = None
                 if 'dogma_attributes' in type_data:
                     for attr in type_data['dogma_attributes']:
-                        # --- FIX: Dogma Attr for implant slot is 300 ---
-                        if attr['attribute_id'] == 300: 
+                        if attr['attribute_id'] == 300: # Dogma Attr for implant slot
                             slot = int(attr['value']); 
                             break
                 
@@ -416,7 +376,7 @@ def api_refresh_pilot(request, character_id):
                 logger.error(f"Failed to cache SDE for skill_id {skill_id}: {e}", exc_info=True)
                 continue # Skip this one skill
         
-        # --- Cache Implants SDE ---
+        # Cache Implants SDE
         logger.debug(f"Caching SDE for implants for {character_id}")
         all_implant_ids = snapshot.get_implant_ids()
         cached_type_ids = set(EveType.objects.filter(type_id__in=all_implant_ids).values_list('type_id', flat=True))
@@ -431,7 +391,6 @@ def api_refresh_pilot(request, character_id):
 
                 if not group:
                     group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                    # --- FIX: Need to get category first ---
                     category_id = group_data.get('category_id')
                     category = None
                     if category_id:
@@ -439,8 +398,7 @@ def api_refresh_pilot(request, character_id):
                             category = EveCategory.objects.get(category_id=category_id)
                         except EveCategory.DoesNotExist:
                             logger.warning(f"Could not find Category {category_id} for Group {group_id}")
-                            pass # Will be created if SDE importer ran
-                    # --- END FIX ---
+                            pass
                     group = EveGroup.objects.create(
                         group_id=group_id, 
                         name=group_data['name'],
@@ -452,8 +410,7 @@ def api_refresh_pilot(request, character_id):
                 slot = None
                 if 'dogma_attributes' in type_data:
                     for attr in type_data['dogma_attributes']:
-                         # --- FIX: Dogma Attr for implant slot is 300 ---
-                        if attr['attribute_id'] == 300: 
+                        if attr['attribute_id'] == 300: # Dogma Attr for implant slot
                             slot = int(attr['value']); 
                             break
                         
@@ -473,7 +430,6 @@ def api_refresh_pilot(request, character_id):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
-# --- NEW API VIEW FOR X-UP MODAL ---
 @login_required
 def api_get_implants(request):
     """
@@ -497,7 +453,6 @@ def api_get_implants(request):
     if not token:
         logout(request)
         logger.error(f"api_get_implants: Token refresh failed for {character_id}, logging user out")
-        # --- THIS IS THE FIX: The text 'Check for correct scope' was mangled with the status code.
         return JsonResponse({"status": "error", "message": "Auth failed"}, status=401)
     
     # Check for correct scope
@@ -506,7 +461,7 @@ def api_get_implants(request):
         return JsonResponse({"status": "error", "message": "Missing 'esi-clones.read_implants.v1' scope."}, status=403)
 
     try:
-        # --- Make ESI call and get headers ---
+        # Make ESI call and get headers
         logger.debug(f"Fetching /implants/ for {character_id} (X-Up modal)")
         implants_op = esi.client.Clones.get_characters_character_id_implants(
             character_id=character_id,
@@ -514,10 +469,7 @@ def api_get_implants(request):
         )
         implants_response = implants_op.results()
         
-        # --- Get Expiry header ---
-        # ESI returns an 'Expires' header (e.g., 'Thu, 06 Nov 2025 10:12:13 GMT')
-        # We also get 'Cache-Control' (e.g., 'max-age=120')
-        # The 'X-Esi-Expires' header is easier to parse.
+        # Get Expiry header
         expires_str = implants_op.header.get('Expires', [None])[0]
         expires_dt = None
         expires_iso = None
@@ -538,18 +490,13 @@ def api_get_implants(request):
             logger.error(f"Invalid implants response for {character_id} (X-Up modal): {implants_response}")
             raise Exception("Invalid implants response")
 
-        # --- SDE & Grouping Logic (same as pilot_detail) ---
+        # SDE & Grouping Logic (same as pilot_detail)
         all_implant_ids = implants_response # Response is just a list of IDs
         enriched_implants = []
         
-        # ---
-        # --- THE FIX IS HERE ---
-        # ---
-        # Wrap the SDE cache-fill in a try/except so it doesn't crash
-        # the whole request if one ESI lookup fails.
         try:
             if all_implant_ids:
-                # --- We MUST cache missing SDE data here ---
+                # We MUST cache missing SDE data here
                 cached_types = {t.type_id: t for t in EveType.objects.filter(type_id__in=all_implant_ids).select_related('group')}
                 cached_groups = {g.group_id: g for g in EveGroup.objects.all()}
                 
@@ -563,7 +510,6 @@ def api_get_implants(request):
                         group = cached_groups.get(group_id)
                         if not group:
                             group_data = esi.client.Universe.get_universe_groups_group_id(group_id=group_id).results()
-                            # --- FIX: Need to get category first ---
                             category_id = group_data.get('category_id')
                             category = None
                             if category_id:
@@ -571,8 +517,7 @@ def api_get_implants(request):
                                     category = EveCategory.objects.get(category_id=category_id)
                                 except EveCategory.DoesNotExist:
                                     logger.warning(f"Could not find Category {category_id} for Group {group_id}")
-                                    pass # Will be created if SDE importer ran
-                            # --- END FIX ---
+                                    pass
                             group = EveGroup.objects.create(
                                 group_id=group_id, 
                                 name=group_data['name'],
@@ -584,8 +529,7 @@ def api_get_implants(request):
                         slot = None
                         if 'dogma_attributes' in type_data:
                             for attr in type_data['dogma_attributes']:
-                                # --- FIX: Dogma Attr for implant slot is 300 ---
-                                if attr['attribute_id'] == 300: 
+                                if attr['attribute_id'] == 300: # Dogma Attr for implant slot
                                     slot = int(attr['value']); 
                                     break
                         
@@ -595,7 +539,6 @@ def api_get_implants(request):
                     except Exception:
                         logger.error(f"Failed to cache SDE for implant_id {implant_id}", exc_info=True)
                         continue # Skip this implant
-                # --- End SDE Cache ---
 
                 for implant_id in all_implant_ids:
                     if implant_id in cached_types:
@@ -609,8 +552,6 @@ def api_get_implants(request):
             # Log the SDE error to the console but don't crash the request
             logger.error(f"ERROR: Failed to cache SDE for implants in api_get_implants: {e}", exc_info=True)
             # The 'enriched_implants' list will be empty, which is fine.
-        # --- END FIX ---
-
         
         sorted_implants = sorted(enriched_implants, key=lambda i: i.get('slot', 0))
         
@@ -632,18 +573,15 @@ def api_get_implants(request):
             'implants_col2': implants_col2,
         }
         
-        # --- MODIFICATION: Added a try/except around rendering ---
         try:
             # Render the partial template to HTML
             html = render_to_string('_implant_list.html', context)
         except Exception as e:
-            # This will catch TemplateDoesNotExist or other rendering errors
             logger.error(f"Failed to render _implant_list.html: {e}", exc_info=True)
             return JsonResponse({
                 "status": "error", 
                 "message": f"Template rendering failed: {str(e)}"
             }, status=500)
-        # --- END MODIFICATION ---
         
         # Return the HTML and the expiry time
         logger.debug(f"Successfully served implants for {character_id} (X-Up modal)")
@@ -659,9 +597,6 @@ def api_get_implants(request):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
-# ---
-# --- NEW: API for setting main character
-# ---
 @login_required
 @require_POST
 def api_set_main_character(request):
@@ -700,6 +635,3 @@ def api_set_main_character(request):
     except Exception as e:
         logger.error(f"Error in api_set_main_character: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
-# ---
-# --- END NEW API
-# ---

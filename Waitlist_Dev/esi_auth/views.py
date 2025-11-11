@@ -1,12 +1,11 @@
 from django.shortcuts import redirect, resolve_url
-# --- THE FIX ---
-# Import the tools we need
+# --- Import the tools we need ---
 from django.contrib.auth import logout, login
 # Import the built-in User model
 from django.contrib.auth.models import User
 # Import your EveCharacter model
 from waitlist.models import EveCharacter
-# --- END FIX ---
+# --- END ---
 from django.conf import settings
 from urllib.parse import urlencode
 import secrets 
@@ -15,20 +14,16 @@ from datetime import timezone, timedelta # Import for time calculations
 # Import the CallbackRedirect model from the esi library
 from esi.models import CallbackRedirect, Token
 
-# --- NEW: Import ESI client ---
+# --- Import ESI client ---
 from esi.clients import EsiClientProvider
 from bravado.exception import HTTPNotFound
-# --- END NEW ---
+# --- END ---
 
-# ---
-# --- NEW: Import logging
-# ---
+# --- Import logging ---
 import logging
 # Get a logger for this specific Python file
 logger = logging.getLogger(__name__)
-# ---
-# --- END NEW LOGGING IMPORT
-# ---
+# --- END ---
 
 
 try:
@@ -44,8 +39,7 @@ def esi_login(request):
     This is Step 1 of the OAuth flow.
     """
     
-    # 1. Force Django to save the session. This guarantees
-    #    request.session.session_key is not None.
+    # 1. Force Django to save the session.
     if not request.session.session_key:
         request.session.save()
 
@@ -53,11 +47,9 @@ def esi_login(request):
     state = secrets.token_urlsafe(16)
     
     # 3. Define where the user should land *after* the ESI callback.
-    #    This now points to our new "Step 3" view.
     redirect_url = resolve_url('esi_auth:sso_complete') 
 
     # 4. Create or Update the CallbackRedirect object
-    #    This prevents a crash if a user clicks "login" twice.
     callback, created = CallbackRedirect.objects.update_or_create(
         session_key=request.session.session_key,  # This is the key to look up
         defaults={                                # These are the values to set/update
@@ -70,7 +62,7 @@ def esi_login(request):
     # 5. Build the EVE SSO redirect URL
     authorize_url = "https://login.eveonline.com/v2/oauth/authorize/"
     
-    # --- THE FIX: Dynamically choose scope list ---
+    # --- Dynamically choose scope list ---
     scope_type = request.GET.get('scopes', 'regular')
 
     scopes_to_request = []
@@ -82,7 +74,7 @@ def esi_login(request):
         # Default to regular scopes
         scopes_to_request = settings.ESI_SSO_SCOPES_REGULAR
         logger.debug(f"Requesting REGULAR scopes for session {request.session.session_key}")
-    # --- END FIX ---
+    # --- END ---
 
     params = {
         'response_type': 'code',
@@ -97,8 +89,7 @@ def esi_login(request):
     return redirect(f"{authorize_url}?{urlencode(params)}")
 
 
-# --- THE FIX ---
-# This is our new "Step 3" view
+# This is our "Step 3" view
 def sso_complete_login(request):
     """
     Handles the final step of logging the user into Django.
@@ -107,14 +98,10 @@ def sso_complete_login(request):
     logger.debug(f"SSO Step 3: Completing login for session {request.session.session_key}")
     try:
         # 1. Find the CallbackRedirect object for this session.
-        #    The 'esi_callback' view has already used it and
-        #    populated its 'token' field.
         callback_redirect = CallbackRedirect.objects.get(
             session_key=request.session.session_key
         )
     except CallbackRedirect.DoesNotExist:
-        # This shouldn't happen, but if it does, send to homepage.
-        # --- MODIFIED ---
         logger.warning(f"SSO Step 3: No CallbackRedirect found for session {request.session.session_key}")
         return redirect('waitlist:home')
 
@@ -123,53 +110,37 @@ def sso_complete_login(request):
     if not esi_token:
         # Callback happened but didn't result in a token.
         callback_redirect.delete() # Clean up the failed redirect
-        # --- MODIFIED ---
         logger.warning(f"SSO Step 3: CallbackRedirect found but has no token. Deleting.")
         return redirect('waitlist:home')
         
-    # --- THIS IS THE FIX (Part 2) ---
-    # The 'esi_token' is the NEW token. We must delete all
-    # old tokens for this character to prevent duplicates.
+    # 3. Prune old tokens for this character to prevent duplicates.
     logger.debug(f"SSO Step 3: Pruning old tokens for char {esi_token.character_id}")
     Token.objects.filter(
         character_id=esi_token.character_id
     ).exclude(pk=esi_token.pk).delete()
-    # --- END FIX ---
         
-    # 3. --- THIS IS THE NEW LOGIC ---
-    #    The 'esi_callback' does NOT create a user, so we do it.
-    
-    # We assume the token object has these fields.
+    # 4. Get character info from token
     try:
         char_id = esi_token.character_id
         char_name = esi_token.character_name
     except AttributeError:
-        # This will fail if the token model fields are named differently.
-        # If so, we can't log in, so just clean up and go home.
         logger.error(f"SSO Step 3: ESI token object is missing character_id or character_name fields. Token PK: {esi_token.pk}")
         callback_redirect.delete()
-        # --- MODIFIED ---
         return redirect('waitlist:home')
         
     if not char_id or not char_name:
         # Token is missing key info
         logger.error(f"SSO Step 3: ESI token has null char_id or char_name. Token PK: {esi_token.pk}")
         callback_redirect.delete()
-        # --- MODIFIED ---
         return redirect('waitlist:home')
 
-
-    # ---
-    # --- THIS IS THE FIX: Handle 'Add Alt' vs 'First Login'
-    # ---
-    
+    # 5. Handle 'Add Alt' vs 'First Login'
     user_account = None 
     user_was_authenticated = request.user.is_authenticated
     
-    # --- NEW: Get ESI client ---
     esi = EsiClientProvider()
     
-    # --- NEW: Helper function to get public corp/alliance data ---
+    # Helper function to get public corp/alliance data
     def get_public_character_data(character_id):
         try:
             logger.debug(f"SSO Step 3: Getting public data for char {character_id}")
@@ -207,13 +178,9 @@ def sso_complete_login(request):
         except Exception as e:
             logger.error(f"Error fetching public data for {character_id}: {e}", exc_info=True)
             return {} # Return empty dict on failure
-    # --- END NEW HELPER ---
     
-    
-    # --- Get public data ---
+    # Get public data
     public_data = get_public_character_data(char_id)
-    # ---
-
 
     if user_was_authenticated:
         # CASE 1: USER IS ALREADY LOGGED IN (Adding an Alt)
@@ -221,8 +188,6 @@ def sso_complete_login(request):
         logger.info(f"SSO Step 3: Attaching alt {char_name} ({char_id}) to existing user {user_account.username}")
     else:
         # CASE 2: USER IS NOT LOGGED IN
-        
-        # --- THIS IS THE FIX: Check if character exists first ---
         try:
             existing_char = EveCharacter.objects.get(character_id=char_id)
             # If found, log in as that character's user
@@ -249,24 +214,19 @@ def sso_complete_login(request):
                     user_account.is_staff = True
                     user_account.is_superuser = True
                 user_account.save() # Save the new user (with flags)
-        # --- END FIX ---
 
 
-    # 5. Link the token to this user account.
+    # 6. Link the token to this user account.
     if esi_token.user is None:
         esi_token.user = user_account
         esi_token.save()
         
-    # --- FINAL FIX: Create the EveCharacter object ---
-    # 6. Find or create the EveCharacter link.
-    
+    # 7. Find or create the EveCharacter link.
     expiry_time = esi_token.created + timedelta(seconds=1200)
     
-    # --- NEW: Check if this is the first char for this user ---
-    # We do this *before* creating the new one
+    # Check if this is the first char for this user
     existing_char_count = EveCharacter.objects.filter(user=user_account).count()
     is_first_char = (existing_char_count == 0)
-    # --- END NEW ---
     
     eve_char, char_created = EveCharacter.objects.get_or_create(
         character_id=char_id,
@@ -276,8 +236,8 @@ def sso_complete_login(request):
             'access_token': esi_token.access_token,
             'refresh_token': esi_token.refresh_token,
             'token_expiry': expiry_time, # Use our calculated time
-            'is_main': is_first_char, # <-- NEW: Set is_main if first char
-            **public_data # <-- NEW: Add corp/alliance data
+            'is_main': is_first_char, # Set is_main if first char
+            **public_data # Add corp/alliance data
         }
     )
     
@@ -285,7 +245,7 @@ def sso_complete_login(request):
         # Character record already existed
         logger.debug(f"SSO Step 3: EveCharacter {char_id} already exists, updating token and public data")
         
-        # --- NEW: Update token and public data ---
+        # Update token and public data
         eve_char.access_token = esi_token.access_token
         eve_char.refresh_token = esi_token.refresh_token
         eve_char.token_expiry = expiry_time
@@ -301,59 +261,45 @@ def sso_complete_login(request):
             eve_char.user = user_account
         
         eve_char.save()
-        # --- END NEW ---
         
     elif char_created and not is_first_char:
         # This was a new character, but if the token has expired
         # we need to update the expiry time.
-        # This handles the case where the EveCharacter was created
-        # but the token fields were not updated.
-        # A bit redundant with the defaults, but ensures freshness.
         logger.debug(f"SSO Step 3: New EveCharacter {char_id} created as an alt")
         
-        # --- NEW: Make sure only one main ---
         # If we just created a new alt, ensure it's not set as main
         if eve_char.is_main:
             eve_char.is_main = False
-        # --- END NEW ---
 
         eve_char.access_token = esi_token.access_token
         eve_char.refresh_token = esi_token.refresh_token
         eve_char.token_expiry = expiry_time # Use our calculated time
         eve_char.save()
 
-    # --- END FINAL FIX ---
-
-    # 7. We have the user object in memory, so we can
+    # 8. We have the user object in memory, so we can
     #    now safely delete the redirect object.
     logger.debug(f"SSO Step 3: Deleting CallbackRedirect {callback_redirect.pk}")
     callback_redirect.delete()
 
-    # 8. Now, we perform the login logic.
-    if user_account: # This user object is now guaranteed to exist
+    # 9. Now, we perform the login logic.
+    if user_account: 
         
-        # --- THIS IS THE FIX ---
         # Only log the user in if they weren't *already* logged in
-        # at the start of this request.
         if not user_was_authenticated:
             logger.info(f"SSO Step 3: Logging in user {user_account.username}")
-        # --- END FIX ---
-            if not user_account.is_active: # This is a good safety check
+            if not user_account.is_active: 
                 user_account.is_active = True
                 user_account.save()
                 
-            # 9. If a user is associated, log them in!
+            # If a user is associated, log them in!
             login(request, user_account)
             
-            # 10. Force Django to save the session *after* logging in
-            #    but *before* redirecting.
+            # Force Django to save the session *after* logging in
             request.session.save()
     
-    # 11. Send the now-logged-in user to the homepage.
+    # 10. Send the now-logged-in user to the homepage.
     logger.info(f"SSO Step 3: Login complete for {char_name}, redirecting to home")
-    # --- MODIFIED ---
     return redirect('waitlist:home')
-# --- END FIX ---
 
 
 def esi_logout(request):
@@ -362,5 +308,4 @@ def esi_logout(request):
     """
     logger.info(f"User {request.user.username} logging out")
     logout(request)
-    # --- MODIFIED ---
     return redirect('waitlist:home')

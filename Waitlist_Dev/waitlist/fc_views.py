@@ -6,6 +6,9 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseBadRequest
 from bravado.exception import HTTPNotFound
 from esi.clients import EsiClientProvider
+# --- NEW: Import send_event ---
+from django_eventstream import send_event
+# --- END NEW ---
 
 from .models import (
     EveCharacter, ShipFit, Fleet, FleetWaitlist,
@@ -89,6 +92,13 @@ def api_fc_manage_waitlist(request):
             count = pending_fits.update(status='DENIED', denial_reason="Waitlist closed before approval.")
             logger.info(f"Denied {count} pending fits.")
             
+            # --- NEW: Send event to all clients ---
+            logger.debug("Sending 'waitlist-updates' event")
+            send_event('waitlist-updates', 'update', {
+                'action': 'close'
+            })
+            # --- END NEW ---
+            
             return JsonResponse({"status": "success", "message": "Waitlist closed. All pending fits denied."})
         except Exception as e:
             logger.error(f"Error closing waitlist: {e}", exc_info=True)
@@ -122,6 +132,15 @@ def api_fc_manage_waitlist(request):
             waitlist, created = FleetWaitlist.objects.get_or_create(fleet=fleet_to_open)
             waitlist.is_open = True
             waitlist.save()
+            
+            # --- NEW: Send event to all clients ---
+            # Note: This won't show anything, as the page reloads,
+            # but it's good practice.
+            logger.debug("Sending 'waitlist-updates' event")
+            send_event('waitlist-updates', 'update', {
+                'action': 'open'
+            })
+            # --- END NEW ---
             
             logger.info(f"Waitlist '{fleet_to_open.description}' opened by FC {fc_character.character_name}")
             return JsonResponse({"status": "success", "message": f"Waitlist '{fleet_to_open.description}' opened. Please link your in-game fleet."})
@@ -498,6 +517,14 @@ def api_fc_invite_pilot(request):
         fit.status = ShipFit.FitStatus.IN_FLEET
         fit.save()
         
+        # --- NEW: Send event to all clients ---
+        logger.debug("Sending 'waitlist-updates' event")
+        send_event('waitlist-updates', 'update', {
+            'fit_id': fit.id,
+            'action': 'invite'
+        })
+        # --- END NEW ---
+        
         logger.info(f"Invite sent to {pilot_to_invite.character_name} by {fc_character.character_name}")
         return JsonResponse({"status": "success", "message": "Invite sent."})
 
@@ -842,6 +869,13 @@ def api_fc_refresh_structure(request):
             )
             count = pending_fits.update(status='DENIED', denial_reason="Fleet closed (ESI fleet not found).")
             logger.info(f"Closed waitlist {open_waitlist.id} and denied {count} pending fits.")
+
+            # --- NEW: Send event to all clients ---
+            logger.debug("Sending 'waitlist-updates' event")
+            send_event('waitlist-updates', 'update', {
+                'action': 'close'
+            })
+            # --- END NEW ---
 
             return JsonResponse({
                 "status": "error",

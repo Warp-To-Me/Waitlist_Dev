@@ -1,8 +1,6 @@
 from django.db import models
-# --- REMOVED: from waitlist.models import EveCharacter ---
 import json
 
-# --- *** NEW MODEL: EveCategory *** ---
 # From SDE: invCategories.csv
 class EveCategory(models.Model):
     category_id = models.IntegerField(primary_key=True, unique=True)
@@ -13,13 +11,11 @@ class EveCategory(models.Model):
     def __str__(self):
         return self.name
 
-# --- *** UPDATED MODEL: EveGroup *** ---
 # From SDE: invGroups.csv
 class EveGroup(models.Model):
     group_id = models.IntegerField(primary_key=True, unique=True)
     name = models.CharField(max_length=255, db_index=True)
     
-    # --- *** MODIFIED: This is now a ForeignKey *** ---
     category = models.ForeignKey(
         EveCategory, 
         on_delete=models.CASCADE, 
@@ -27,7 +23,6 @@ class EveGroup(models.Model):
         null=True, # Allow null
         blank=True
     )
-    # --- *** END MODIFICATION *** ---
     
     icon_id = models.IntegerField(null=True, blank=True)
     published = models.BooleanField(default=True)
@@ -35,7 +30,6 @@ class EveGroup(models.Model):
     def __str__(self):
         return self.name
 
-# --- *** UPDATED MODEL: EveType *** ---
 # From SDE: invTypes.csv
 class EveType(models.Model):
     type_id = models.IntegerField(primary_key=True, unique=True)
@@ -55,7 +49,6 @@ class EveType(models.Model):
     icon_id = models.IntegerField(null=True, blank=True)
     published = models.BooleanField(default=True)
     
-    # --- *** MODIFIED: Kept these fields, will be populated by SDE importer *** ---
     # These come from dgmTypeAttributes.csv
     hi_slots = models.IntegerField(null=True, blank=True, help_text="Ship: High slots (Dogma Attr 14)")
     med_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Medium slots (Dogma Attr 13)")
@@ -63,18 +56,12 @@ class EveType(models.Model):
     rig_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Rig slots (Dogma Attr 1137)")
     subsystem_slots = models.IntegerField(null=True, blank=True, help_text="Ship: Subsystem slots (Dogma Attr 1367)")
     
-    # ---
-    # --- THIS IS THE FIX: Re-adding the 'slot' field
-    # --- This was removed in migration 0008, but is still used
-    # --- by the pilot/views.py file for implants.
+    # This field is used by the pilot/views.py file for implants.
     slot = models.IntegerField(
         null=True, 
         blank=True, 
         help_text="Implant slot (if applicable) (Dogma Attr 300)"
     )
-    # ---
-    # --- END THE FIX
-    # ---
     
     # This comes from dgmTypeEffects.csv
     slot_type = models.CharField(
@@ -92,14 +79,9 @@ class EveType(models.Model):
         default=0, 
         help_text="Item meta level (Dogma Attr 633)"
     )
-    
-    # --- *** REMOVED: attributes_json is no longer needed *** ---
-    # attributes_json = models.TextField(...)
-    # --- *** END REMOVAL *** ---
 
     def __str__(self):
         return self.name
-# --- END UPDATED MODELS ---
 
 
 class PilotSnapshot(models.Model):
@@ -109,21 +91,18 @@ class PilotSnapshot(models.Model):
     We can just fetch the JSON blob from ESI and store it.
     """
     character = models.OneToOneField(
-        'waitlist.EveCharacter', # --- MODIFIED: Use string notation ---
+        'waitlist.EveCharacter', # Use string notation to avoid circular import
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="pilot_snapshot"
     )
     
     # We will store the direct JSON response from ESI.
-    # This is much more efficient than creating 500+ skill objects.
-    # We'll need to import json to load/dump this.
     skills_json = models.TextField(blank=True, null=True, help_text="JSON response from ESI /skills/ endpoint")
     implants_json = models.TextField(blank=True, null=True, help_text="JSON response from ESI /implants/ endpoint")
     
     last_updated = models.DateTimeField(auto_now=True)
 
-    # --- MODIFIED THIS METHOD ---
     def get_implant_ids(self):
         """Helper to get implant ID list from JSON."""
         if not self.implants_json:
@@ -134,7 +113,6 @@ class PilotSnapshot(models.Model):
             return implant_ids
         except json.JSONDecodeError:
             return []
-    # --- END MODIFICATION ---
 
     def get_skills(self):
         """Helper to get skill list from JSON."""
@@ -144,10 +122,6 @@ class PilotSnapshot(models.Model):
             # The ESI response is a dict, e.g.:
             # {"skills": [{"skill_id": 3339, "active_skill_level": 5}, ...], "total_sp": 150000000}
             skills_data = json.loads(self.skills_json)
-            
-            # We will just return the list of skill dicts for the template
-            # We can add 'icon_url' here if we want, but it's slow.
-            # It's better to just pass the skill_id to the template.
             return skills_data.get('skills', [])
         except json.JSONDecodeError:
             return []

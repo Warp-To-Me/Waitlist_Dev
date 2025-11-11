@@ -394,6 +394,9 @@ It will be filled by the partial template on page load.
                     // Optional: show a temporary "approved" state
                     // For now, we just leave buttons disabled
                 }
+                // ---
+                // --- NEW: Event is sent from the server, no need to do anything here
+                // ---
             } else {
                 // Re-enable buttons on failure
                 if (card) {
@@ -443,6 +446,9 @@ It will be filled by the partial template on page load.
                 if (card) {
                     card.classList.add('status-IN_FLEET');
                 }
+                // ---
+                // --- NEW: Event is sent from the server, no need to do anything here
+                // ---
             } else {
                 // Show a pop-up on error
                 // We can use our new custom confirm modal as an alert
@@ -470,7 +476,10 @@ It will be filled by the partial template on page load.
     // --- 2. TIMER AND LIVE POLLING ---
 
     const waitlistContainer = document.getElementById('waitlist-container-live');
-    let pollingInterval = null;
+    // ---
+    // --- REMOVED: Polling interval is no longer needed
+    // ---
+    // let pollingInterval = null;
     let timerInterval = null;
 
     // This function updates all timers on the page
@@ -493,6 +502,13 @@ It will be filled by the partial template on page load.
 
     // This function fetches the new HTML
     function fetchWaitlistHTML() {
+        // ---
+        // --- NEW: Add a console.log
+        // ---
+        console.log("Fetching new waitlist HTML...");
+        // ---
+        // --- END NEW
+        // ---
         fetch("{% url 'waitlist:api_get_waitlist_html' %}")
             .then(response => {
                 if (response.ok) {
@@ -953,9 +969,11 @@ It will be filled by the partial template on page load.
         if (timerInterval) clearInterval(timerInterval); // Clear old timer
         timerInterval = setInterval(updateWaitTimers, 10000); // Update timers every 10s
 
-        // Start live polling
-        if (pollingInterval) clearInterval(pollingInterval); // Clear old poller
-        pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
+        // ---
+        // --- REMOVED: Polling interval is no longer needed
+        // ---
+        // if (pollingInterval) clearInterval(pollingInterval); // Clear old poller
+        // pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
     }
 
     // --- 5. PAGE INITIALIZATION ---
@@ -972,6 +990,45 @@ It will be filled by the partial template on page load.
 
         // Start all the interactive parts
         initializeWaitlist();
+
+        // ---
+        // --- NEW: EventSource / Server-Sent Events (SSE) ---
+        // ---
+        // We replace the old pollingInterval with this.
+        console.log("Connecting to event stream /events/waitlist-updates/...");
+
+        // Connect to the event stream URL
+        // ---
+        // --- THIS IS THE FIX ---
+        // --- We pass the channel name as a query parameter, not a path ---
+        const eventSource = new EventSource("/events/?channel=waitlist-updates");
+        // ---
+        // --- END THE FIX ---
+        // ---
+
+        // --- THIS IS THE FIX: Listen for the 'update' event type ---
+        // The server sends events with type 'update', not the default 'message'.
+        eventSource.addEventListener('update', (event) => {
+            console.log("Received 'update' event from server:", event.data);
+            // We received an update!
+            // Call our existing function to refresh the HTML.
+            fetchWaitlistHTML();
+        });
+        // --- END THE FIX ---
+
+        // Optional: Handle connection open
+        eventSource.onopen = (event) => {
+            console.log("EventSource connection opened.");
+        };
+
+        // Optional: Handle errors
+        eventSource.onerror = (event) => {
+            console.error("EventSource error:", event);
+            // Don't close, EventSource will try to reconnect automatically
+        };
+        // ---
+        // --- END NEW: EventSource ---
+        // ---
     });
 
 </script>

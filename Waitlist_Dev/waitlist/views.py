@@ -5,6 +5,9 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 from django.utils import timezone
+# --- NEW: Import send_event ---
+from django_eventstream import send_event
+# --- END NEW ---
 from .models import EveCharacter, ShipFit, FleetWaitlist, DoctrineFit
 from pilot.models import EveType
 from .fit_parser import parse_eft_fit, check_fit_against_doctrines
@@ -198,6 +201,14 @@ def api_submit_fit(request):
             }
         )
         
+        # --- NEW: Send event to all clients ---
+        logger.debug("Sending 'waitlist-updates' event")
+        send_event('waitlist-updates', 'update', {
+            'fit_id': fit.id,
+            'action': 'submit'
+        })
+        # --- END NEW ---
+        
         if created:
             logger.info(f"New fit {fit.id} created for {character.character_name}")
             return JsonResponse({"status": "success", "message": f"Fit for {character.character_name} submitted!"})
@@ -243,6 +254,15 @@ def api_update_fit_status(request):
             logger.debug(f"Fit {fit.id} approved, category set to OTHER")
         
         fit.save()
+        
+        # --- NEW: Send event to all clients ---
+        logger.debug("Sending 'waitlist-updates' event")
+        send_event('waitlist-updates', 'update', {
+            'fit_id': fit.id,
+            'action': 'approve'
+        })
+        # --- END NEW ---
+        
         logger.info(f"Fit {fit.id} ({fit.character.character_name}) approved by {request.user.username}")
         return JsonResponse({"status": "success", "message": "Fit approved"})
         
@@ -250,6 +270,15 @@ def api_update_fit_status(request):
         fit.status = 'DENIED'
         fit.denial_reason = "Denied by FC from waitlist."
         fit.save()
+        
+        # --- NEW: Send event to all clients ---
+        logger.debug("Sending 'waitlist-updates' event")
+        send_event('waitlist-updates', 'update', {
+            'fit_id': fit.id,
+            'action': 'deny'
+        })
+        # --- END NEW ---
+        
         logger.info(f"Fit {fit.id} ({fit.character.character_name}) denied by {request.user.username}")
         return JsonResponse({"status": "success", "message": "Fit denied"})
 
@@ -262,6 +291,10 @@ def api_get_waitlist_html(request):
     """
     Returns just the HTML for the waitlist columns.
     Used by the live polling JavaScript.
+    ---
+    --- MODIFIED: This view is now called by the EventSource listener ---
+    --- instead of a 5-second poll.
+    ---
     """
     # This view is polled every 5s, so we use DEBUG level
     logger.debug(f"Polling request received from {request.user.username}")

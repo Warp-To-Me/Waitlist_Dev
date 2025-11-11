@@ -13,3 +13,8 @@ requests==2.32.3
 
 # For SDE CSV Processing
 pandas
+
+# ASGI & Real-time Events
+daphne
+channels
+django-eventstream

@@ -1,23 +1,14 @@
 from django.contrib import admin
-# Import the models that *actually exist* from waitlist.models
-# --- MODIFIED: Import new models ---
 from waitlist.models import (
     EveCharacter, ShipFit, Fleet, FleetWaitlist, DoctrineFit,
     FitSubstitutionGroup, FleetWing, FleetSquad,
-    # --- *** NEW: Import new models *** ---
     EveDogmaAttribute, ItemComparisonRule, EveTypeDogmaAttribute
 )
-# --- MODIFIED: Import EveType ---
 from pilot.models import EveType, EveGroup
-# --- END MODIFIED ---
-# --- NEW IMPORTS for DoctrineFit Admin ---
 from django import forms
 from django.core.exceptions import ValidationError
-# --- MODIFIED: Import renamed function ---
 from waitlist.fit_parser import parse_eft_to_full_doctrine_data
-# --- END MODIFIED ---
 import json
-# --- END NEW IMPORTS ---
 
 
 # We will control FC/Admin permissions via Django's User/Group system,
@@ -37,30 +28,28 @@ class ShipFitAdmin(admin.ModelAdmin):
     Admin view for submitted Ship Fits.
     This is where FCs will approve/deny fits.
     """
-    list_display = ('character', 'ship_name', 'status', 'category', 'submitted_at', 'waitlist') # --- MODIFIED ---
-    list_filter = ('status', 'category', 'submitted_at', 'waitlist') # --- MODIFIED ---
-    search_fields = ('character__character_name', 'ship_name') # --- MODIFIED ---
+    list_display = ('character', 'ship_name', 'status', 'category', 'submitted_at', 'waitlist')
+    list_filter = ('status', 'category', 'submitted_at', 'waitlist')
+    search_fields = ('character__character_name', 'ship_name')
     
     # Make status and denial_reason editable from the list view
-    list_editable = ('status', 'category',) # --- MODIFIED ---
+    list_editable = ('status', 'category',)
     
     # Add fields to the detail view
-    # --- FIX: Make the new fields read-only for now ---
     readonly_fields = (
         'character', 'raw_fit', 'submitted_at', 'last_updated', 'waitlist',
         'ship_name', 'ship_type_id', 'tank_type', 'fit_issues', 'total_fleet_hours', 'hull_fleet_hours',
-        'parsed_fit_json', # --- ADDED ---
+        'parsed_fit_json',
     )
     
     fieldsets = (
         (None, {
-            'fields': ('character', 'status', 'category', 'denial_reason', 'waitlist') # --- MODIFIED ---
+            'fields': ('character', 'status', 'category', 'denial_reason', 'waitlist')
         }),
         ('Fit Details', {
             'classes': ('collapse',), # Make this section collapsible
-            'fields': ('raw_fit', 'parsed_fit_json', 'submitted_at', 'last_updated') # --- MODIFIED ---
+            'fields': ('raw_fit', 'parsed_fit_json', 'submitted_at', 'last_updated')
         }),
-        # --- NEW: Read-only section for parsed data ---
         ('Parsed Data', {
             'classes': ('collapse',),
             'fields': (
@@ -69,7 +58,6 @@ class ShipFitAdmin(admin.ModelAdmin):
             )
         }),
     )
-    # --- END FIX ---
 
     # Add custom actions to the admin
     actions = ['approve_fits', 'deny_fits']
@@ -83,7 +71,6 @@ class ShipFitAdmin(admin.ModelAdmin):
     get_fit_summary.short_description = "Fit Summary"
 
     def approve_fits(self, request, queryset):
-        # --- MODIFIED: Don't auto-assign category ---
         queryset.update(status='APPROVED', denial_reason=None)
     approve_fits.short_description = "Approve selected fits"
 
@@ -92,7 +79,7 @@ class ShipFitAdmin(admin.ModelAdmin):
     deny_fits.short_description = "Deny selected fits (default reason)"
 
 @admin.register(Fleet)
-class FleetAdmin(admin.ModelAdmin): # Corrected this line (removed extra .admin)
+class FleetAdmin(admin.ModelAdmin):
     """
     Admin view for managing active Fleets.
     """
@@ -107,17 +94,11 @@ class FleetWaitlistAdmin(admin.ModelAdmin):
     """
     list_display = ('fleet', 'is_open', 'get_approved_count')
     list_filter = ('is_open',)
-    
-    # --- REMOVED ---
-    # filter_horizontal = ('approved_fits',)
 
     def get_approved_count(self, obj):
-        # --- UPDATED: Use new related name ---
         return obj.all_fits.filter(status='APPROVED').count()
     get_approved_count.short_description = "Approved Fits"
 
-
-# --- NEW: Custom Form and Admin for DoctrineFit ---
 
 class DoctrineFitForm(forms.ModelForm):
     """
@@ -147,7 +128,7 @@ class DoctrineFitForm(forms.ModelForm):
         # If the user pasted a fit, parse it
         if eft_fit:
             try:
-                # --- MODIFIED: Run the new parser ---
+                # Run the parser
                 ship_type, fit_summary, parsed_list_json = parse_eft_to_full_doctrine_data(eft_fit)
                 
                 # Success! Populate the real fields
@@ -155,7 +136,6 @@ class DoctrineFitForm(forms.ModelForm):
                 cleaned_data['fit_items_json'] = json.dumps(fit_summary)
                 cleaned_data['raw_fit_eft'] = eft_fit
                 cleaned_data['parsed_fit_json'] = parsed_list_json
-                # --- END MODIFICATION ---
             
             except Exception as e:
                 # Parser failed, raise an error on the EFT field
@@ -164,13 +144,10 @@ class DoctrineFitForm(forms.ModelForm):
                 })
         
         # If no EFT fit, the other fields must be valid
-        # --- THIS IS THE FIX ---
-        # We now check this *after* the parser has had a chance to run
         elif not cleaned_data.get('ship_type') or not cleaned_data.get('fit_items_json'):
             raise ValidationError(
                 "If not using the EFT Importer, 'Ship type' and 'Fit items JSON' are required."
             )
-        # --- END FIX ---
 
         return cleaned_data
 
@@ -184,10 +161,8 @@ class DoctrineFitAdmin(admin.ModelAdmin):
     form = DoctrineFitForm
     
     list_display = ('name', 'ship_type', 'category')
-    # --- MODIFIED: Filter by ship_type's GROUP, not individual ship_type ---
-    # This gives you a clean filter for "Battleship", "Cruiser", etc.
+    # Filter by ship_type's GROUP, not individual ship_type
     list_filter = ('category', 'ship_type__group__name')
-    # --- END MODIFICATION ---
     search_fields = ('name', 'ship_type__name')
     
     # Make the JSON field collapsible
@@ -195,46 +170,31 @@ class DoctrineFitAdmin(admin.ModelAdmin):
         (None, {
             'fields': ('name', 'category', 'description')
         }),
-        # --- NEW: Add EFT Importer fieldset ---
         ('EFT Fit Importer (Optional)', {
             'classes': ('collapse',),
             'fields': ('eft_fit_input',)
         }),
-        # --- END NEW ---
-        # --- MODIFIED: Added new fields ---
         ('Doctrine Definition (Auto-populated)', {
             'fields': ('ship_type', 'fit_items_json', 'raw_fit_eft', 'parsed_fit_json')
         }),
-        # --- END MODIFICATION ---
     )
     
-    # ---
-    # --- THE FIX IS HERE ---
-    # ---
-    # We remove 'ship_type' from readonly_fields so the form's
-    # clean() method can save the value populated by the parser.
+    # We leave readonly_fields empty so the form's
+    # clean() method can save the values populated by the parser.
     readonly_fields = ()
-    # ---
-    # --- END THE FIX ---
-    # ---
 
-    # --- NEW: Filter the dropdowns in the form ---
+    # Filter the dropdowns in the form
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "ship_type":
-            # This is the fix.
-            # We filter the QuerySet for the 'ship_type' field
+            # Filter the QuerySet for the 'ship_type' field
             # to only include items where the group's category_id is 6 (Category "Ship").
             kwargs["queryset"] = EveType.objects.filter(
                 group__category__category_id=6
             ).select_related('group')
             
-        # --- *** THIS IS THE FIX: Removed extra 'self' *** ---
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-        # --- *** END THE FIX *** ---
-    # --- END NEW ---
 
 
-# --- NEW: Admin for FitSubstitutionGroup ---
 @admin.register(FitSubstitutionGroup)
 class FitSubstitutionGroupAdmin(admin.ModelAdmin):
     """
@@ -249,12 +209,8 @@ class FitSubstitutionGroupAdmin(admin.ModelAdmin):
     # Use a filter horizontal for a nice M2M interface
     filter_horizontal = ('substitutes',)
 
-# --- END NEW ---
 
-
-# ---
-# --- NEW: Register Fleet Structure Models ---
-# ---
+# Register Fleet Structure Models
 class FleetSquadInline(admin.TabularInline):
     model = FleetSquad
     extra = 0
@@ -272,14 +228,9 @@ class FleetSquadAdmin(admin.ModelAdmin):
     list_display = ('name', 'squad_id', 'wing', 'assigned_category')
     list_filter = ('wing__fleet', 'assigned_category')
     list_editable = ('assigned_category',)
-# ---
-# --- END NEW ---
-# ---
 
 
-# ---
-# --- *** NEW: Register new rule models *** ---
-# ---
+# Register new rule models
 @admin.register(EveDogmaAttribute)
 class EveDogmaAttributeAdmin(admin.ModelAdmin):
     list_display = ('name', 'attribute_id', 'unit_name')
@@ -292,11 +243,9 @@ class ItemComparisonRuleAdmin(admin.ModelAdmin):
     list_filter = ('group__name', 'higher_is_better')
     # Add autocomplete for easier rule creation
     autocomplete_fields = ('group', 'attribute')
-# ---
-# --- *** END NEW *** ---
-# ---
 
-# --- *** NEW: Register EveTypeDogmaAttribute (read-only) *** ---
+
+# Register EveTypeDogmaAttribute (read-only)
 @admin.register(EveTypeDogmaAttribute)
 class EveTypeDogmaAttributeAdmin(admin.ModelAdmin):
     list_display = ('type', 'attribute', 'value')
@@ -311,4 +260,3 @@ class EveTypeDogmaAttributeAdmin(admin.ModelAdmin):
         return False
     def has_delete_permission(self, request, obj=None):
         return False
-# --- *** END NEW *** ---
