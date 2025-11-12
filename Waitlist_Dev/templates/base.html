@@ -778,9 +778,9 @@
         <!-- --- END NEW --- -->
         <!-- --- FC ADMIN LINKS --- -->
         <!--
-        The 'is_fc' variable is passed from the home view.
-        We check if the user is in the 'Fleet Commander' group.
-        -->
+    The 'is_fc' variable is passed from the home view.
+    We check if the user is in the 'Fleet Commander' group.
+    -->
         {% if is_fc %}
         <!-- Display the FC Admin button if they are in the group -->
         <a href="{% url 'waitlist:fc_admin' %}" class="header-btn" style="background-color: #c25428;" title="FC Waitlist Admin">
@@ -802,6 +802,15 @@
             X-Up
         </button>
         <!-- --- END MOVE --- -->
+        
+    <!-- --- NEW: Django Admin Button --- -->
+        {% if user.is_staff %}
+        <a href="/admin/" class="header-btn" style="background-color: #6a4c93;" title="Django Admin">
+            Admin
+        </a>
+        {% endif %}
+        <!-- --- END NEW --- -->
+
         <!-- The Profile button, its href will be updated by JS -->
         <a href="{% if main_char %}{% url 'pilot:pilot_detail' main_char.character_id %}{% endif %}"
            id="profile-link"

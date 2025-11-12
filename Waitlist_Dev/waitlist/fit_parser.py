@@ -19,6 +19,7 @@ def parse_eft_fit(raw_fit_original: str):
     a list of dicts for the JSON blob, and a Counter summary.
     
     --- *** MODIFIED: This now queries the local SDE (EveType table) *** ---
+    --- *** MODIFIED: This now detects 'low-slot-first' or 'high-slot-first' format *** ---
     """
     # 1. Minimal sanitization
     raw_fit_no_nbsp = raw_fit_original.replace(u'\xa0', u' ')
@@ -64,7 +65,53 @@ def parse_eft_fit(raw_fit_original: str):
     
     logger.debug(f"Parsing fit for ship: {ship_type.name} ({ship_type.type_id})")
     
-    # 4. Parse all items in the fit
+    # 4. --- NEW: Detect Fit Order ---
+    # We peek at the first *actual item* after the header to decide
+    # which slot order to use.
+    
+    item_regex = re.compile(r'^(.*?)(?: x(\d+))?$')
+    first_slot_type = None
+    
+    for line in lines_raw[first_line_index + 1:]:
+        stripped_line = line.strip()
+        
+        if not stripped_line:
+            continue # Skip blank lines
+        if stripped_line.startswith('[') and stripped_line.endswith(']'):
+            continue # Skip empty slots
+            
+        match = item_regex.match(stripped_line)
+        if not match:
+            continue # Skip unmatchable lines
+            
+        item_name = match.group(1).strip()
+        if not item_name:
+            continue # Skip lines that parse to an empty name
+
+        # Found the first item, check its type
+        try:
+            first_item_type = EveType.objects.get(name__iexact=item_name)
+            first_slot_type = first_item_type.slot_type
+            logger.debug(f"First item found: '{item_name}', slot_type: '{first_slot_type}'.")
+            break # We have our answer
+        except EveType.DoesNotExist:
+             logger.warning(f"Fit parsing failed: Unknown item '{item_name}'")
+             raise ValueError(f"Unknown item in fit: '{item_name}'. Is SDE imported?")
+    
+    # This defines the order of fittable sections in an EFT block
+    EFT_SECTION_ORDER = []
+    
+    if first_slot_type == 'low':
+        # This is the in-game copy/paste format
+        EFT_SECTION_ORDER = ['low', 'mid', 'high', 'rig', 'subsystem', 'drone']
+        logger.debug("Using LOW-MID-HIGH parsing order.")
+    else:
+        # This is the traditional EFT format
+        EFT_SECTION_ORDER = ['high', 'mid', 'low', 'rig', 'subsystem', 'drone']
+        logger.debug("Using HIGH-MID-LOW parsing order.")
+    # --- END NEW: Detect Fit Order ---
+
+    # 5. Parse all items in the fit
     parsed_fit_list = [] # For storing JSON
     fit_summary_counter = Counter() # For auto-approval
     
@@ -78,13 +125,8 @@ def parse_eft_fit(raw_fit_original: str):
         "final_slot": "ship" # Special slot for the hull
     })
     fit_summary_counter[ship_type.type_id] += 1
-
-    item_regex = re.compile(r'^(.*?)(?: x(\d+))?$')
     
-    # This defines the order of fittable sections in an EFT block
-    EFT_SECTION_ORDER = ['high', 'mid', 'low', 'rig', 'subsystem', 'drone']
-    
-    current_section_index = 0 # 0 = 'high', 1 = 'mid', ..., 5 = 'drone'
+    current_section_index = 0 # 0 = 'high' or 'low', based on detection
     
     # T3Cs are special
     is_t3c = (ship_type.subsystem_slots or 0) > 0
@@ -116,11 +158,14 @@ def parse_eft_fit(raw_fit_original: str):
             elif 'subsystem' in slot_name: item_slot_type = 'subsystem'
             else: item_slot_type = None 
             
-            if item_slot_type:
+            if item_slot_type and item_slot_type in EFT_SECTION_ORDER: # Check if it's a parseable slot
                 final_slot = item_slot_type
                 try:
                     item_section_index = EFT_SECTION_ORDER.index(item_slot_type)
                     if item_section_index < current_section_index:
+                        # This logic is now correct for both parse orders
+                        # e.g., H-M-L: Found 'high' (0) when in 'mid' (1) -> cargo
+                        # e.g., L-M-H: Found 'low' (0) when in 'mid' (1) -> cargo
                         final_slot = 'cargo'
                     else:
                         current_section_index = item_section_index
@@ -170,11 +215,16 @@ def parse_eft_fit(raw_fit_original: str):
                     if item_section_index == current_section_index:
                         final_slot = item_slot_type
                     elif is_t3c and item_slot_type == 'subsystem' and current_section_index < 5:
+                        # T3C logic: subsystems can appear before rigs
+                        # Both lists have 'subsystem' at index 4 and 'drone' at index 5
+                        # This logic remains correct.
                         final_slot = 'subsystem'
                     elif item_section_index > current_section_index:
+                        # This is a new section, advance our index
                         current_section_index = item_section_index
                         final_slot = item_slot_type
                     else:
+                        # Item from a previous section, must be cargo
                         final_slot = 'cargo'
                 except ValueError:
                     final_slot = 'cargo'

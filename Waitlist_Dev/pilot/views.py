@@ -499,8 +499,8 @@ def api_get_implants(request):
         # Get Expiry header
         # --- THIS IS THE FIX ---
         # The .header attribute is on the *result* of the future,
-        # which is accessed via `.future.result().header` after `.results()` is called.
-        expires_str = implants_op.future.result().header.get('Expires', [None])[0]
+        # which is accessed via `.future.result().headers` after `.results()` is called.
+        expires_str = implants_op.future.result().headers.get('Expires', [None])[0]
         # --- END THE FIX ---
         
         expires_dt = None
