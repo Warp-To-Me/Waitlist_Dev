@@ -274,7 +274,8 @@ def api_get_fit_details(request):
             for t in EveType.objects.filter(type_id__in=set(item_ids)).select_related('group', 'group__category')
         }
 
-        # 4b. Get doctrine items and substitution maps
+        # 4b. Get doctrine items
+        # --- REMOVED: Manual substitution maps (sub_map, reverse_sub_map) ---
         doctrine_items_to_fill = Counter()
         doctrine_name = "No Doctrine Found"
         if doctrine:
@@ -282,19 +283,7 @@ def api_get_fit_details(request):
             doctrine_items_to_fill = Counter(doctrine.get_fit_items())
             logger.debug(f"Comparing fit {fit.id} against doctrine '{doctrine_name}'")
             
-        sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
-        sub_map = {} # { 'base_id': {set of allowed_ids} }
-        reverse_sub_map = {} # { 'sub_id': 'base_id' }
-        
-        for group in sub_groups:
-            base_id_str = str(group.base_item_id)
-            allowed_ids = {sub.type_id for sub in group.substitutes.all()}
-            allowed_ids.add(group.base_item_id)
-            sub_map[base_id_str] = allowed_ids
-            for sub_id in allowed_ids:
-                if sub_id != group.base_item_id:
-                    reverse_sub_map[str(sub_id)] = base_id_str
-        logger.debug(f"Loaded {len(sub_map)} manual substitution groups")
+        # --- REMOVED: FitSubstitutionGroup logic ---
 
         # Pre-cache all attributes for these types
         attribute_values_by_type = {}
@@ -380,22 +369,7 @@ def api_get_fit_details(request):
                         item_obj['status'] = 'doctrine'
                         doctrine_items_to_fill_copy[item_id_str] -= qty_in_fit
                     
-                    elif item_id_str in reverse_sub_map:
-                        # Manual Substitute Match
-                        base_item_id = int(reverse_sub_map[item_id_str])
-                        if str(base_item_id) in doctrine_items_to_fill_copy and doctrine_items_to_fill_copy[str(base_item_id)] > 0:
-                            item_obj['status'] = 'accepted_sub'
-                            base_type = item_types_map.get(base_item_id) # Get sub info
-                            if base_type:
-                                item_obj['substitutes_for'] = [{
-                                    "name": base_type.name,
-                                    "type_id": base_type.type_id,
-                                    "icon_url": f"https://images.evetech.net/types/{base_type.type_id}/icon?size=32",
-                                    "quantity": doctrine_items_to_fill.get(str(base_item_id), 0)
-                                }]
-                            doctrine_items_to_fill_copy[str(base_item_id)] -= qty_in_fit
-                        else:
-                            item_obj['status'] = 'problem'
+                    # --- REMOVED: Manual Substitute Match (reverse_sub_map) ---
                     
                     elif (item_type and item_type.group_id):
                         # Automatic "Equal or Better" Check
@@ -578,47 +552,3 @@ def api_get_fit_details(request):
         traceback.print_exc()
         logger.error(f"Error in api_get_fit_details for fit_id {fit_id}: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
-
-
-@login_required
-@require_POST
-@user_passes_test(is_fleet_commander)
-def api_add_substitution(request):
-    """
-    Handles an FC's request to add a new substitution.
-    """
-    base_item_id = request.POST.get('base_item_id')
-    substitute_item_id = request.POST.get('substitute_item_id')
-    logger.debug(f"FC {request.user.username} adding substitution: base={base_item_id}, sub={substitute_item_id}")
-    
-    if not base_item_id or not substitute_item_id:
-        logger.warning(f"api_add_substitution failed: Missing item IDs")
-        return JsonResponse({"status": "error", "message": "Missing item IDs."}, status=400)
-        
-    try:
-        base_item = EveType.objects.get(type_id=base_item_id)
-        sub_item = EveType.objects.get(type_id=substitute_item_id)
-        
-        # Find or create the substitution group for this base item
-        group, created = FitSubstitutionGroup.objects.get_or_create(
-            base_item=base_item,
-            defaults={'name': f"Substitutes for {base_item.name}"}
-        )
-        if created:
-            logger.info(f"Created new substitution group for {base_item.name}")
-        
-        # Add the new item to the group
-        group.substitutes.add(sub_item)
-        logger.info(f"Added '{sub_item.name}' as substitute for '{base_item.name}' by {request.user.username}")
-        
-        return JsonResponse({
-            "status": "success",
-            "message": f"Added '{sub_item.name}' as a substitute for '{base_item.name}'."
-        })
-
-    except EveType.DoesNotExist:
-        logger.warning(f"api_add_substitution failed: EveType not found (base={base_item_id}, sub={substitute_item_id})")
-        return JsonResponse({"status": "error", "message": "Item not found in database."}, status=404)
-    except Exception as e:
-        logger.error(f"Error in api_add_substitution: {e}", exc_info=True)
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)

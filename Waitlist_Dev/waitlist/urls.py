@@ -31,5 +31,4 @@ urlpatterns = [
     # --- API / Fit views (from api_views.py) ---
     path('api/get_fit_details/', api_views.api_get_fit_details, name='api_get_fit_details'),
     path('api/get_doctrine_fit_details/', api_views.api_get_doctrine_fit_details, name='api_get_doctrine_fit_details'),
-    path('api/add_substitution/', api_views.api_add_substitution, name='api_add_substitution'),
 ]

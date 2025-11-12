@@ -9,6 +9,10 @@ from django import forms
 from django.core.exceptions import ValidationError
 from waitlist.fit_parser import parse_eft_to_full_doctrine_data
 import json
+import logging # <-- Add logging import
+
+# Get a logger for this file
+logger = logging.getLogger(__name__)
 
 # We will control FC/Admin permissions via Django's User/Group system,
 # so we don't need a separate FleetCommander model registration for now.
@@ -231,12 +235,58 @@ class EveDogmaAttributeAdmin(admin.ModelAdmin):
     search_fields = ('name', 'attribute_id')
     list_filter = ('unit_name',)
 
+    # --- NEW: Moved get_search_results here ---
+    def get_search_results(self, request, queryset, search_term):
+        """
+        Overrides the autocomplete search.
+        
+        If we are searching for 'attribute', check if a 'group_id'
+        was passed in the request (by our custom JS).
+        """
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
+        
+        # Get the field name being autocompleted
+        # Note: This check is technically redundant now since this method
+        # is only for EveDogmaAttribute, but it's good practice.
+        field_name = request.GET.get('field_name')
+        
+        if field_name == 'attribute':
+            # Our custom JS adds this parameter to the request
+            group_id = request.GET.get('group_id')
+            
+            if group_id:
+                try:
+                    # 1. Get all type_ids for this group
+                    type_ids_in_group = EveType.objects.filter(group_id=group_id).values_list('type_id', flat=True)
+                    
+                    # 2. Get all unique attribute_ids for those types
+                    relevant_attr_ids = EveTypeDogmaAttribute.objects.filter(
+                        type_id__in=type_ids_in_group
+                    ).values_list('attribute_id', flat=True).distinct()
+                    
+                    # 3. Filter the attribute queryset
+                    queryset = queryset.filter(attribute_id__in=relevant_attr_ids)
+                    logger.debug(f"Filtering attributes for group {group_id}. Found {queryset.count()} relevant attributes.")
+                    
+                except Exception as e:
+                    # Log the error, but don't crash the autocomplete
+                    logger.error(f"Error filtering attribute autocomplete: {e}")
+        
+        return queryset, use_distinct
+    # --- END NEW ---
+
 @admin.register(ItemComparisonRule)
 class ItemComparisonRuleAdmin(admin.ModelAdmin):
     list_display = ('group', 'attribute', 'higher_is_better')
     list_filter = ('group__name', 'higher_is_better')
     # Add autocomplete for easier rule creation
     autocomplete_fields = ('group', 'attribute')
+
+    # --- The Media class stays here, as this is the form being rendered ---
+    class Media:
+        js = ('admin/js/admin_filter.js',)
+    
+    # --- The get_search_results method has been moved ---
 
 # Register EveTypeDogmaAttribute (read-only)
 @admin.register(EveTypeDogmaAttribute)

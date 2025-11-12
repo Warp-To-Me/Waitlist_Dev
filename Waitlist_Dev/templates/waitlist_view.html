@@ -828,11 +828,7 @@ It will be filled by the partial template on page load.
 
         let html = '<div class="fit-modal-layout">';
 
-        // --- 1. Ship Render Column ---
-        html += `<div class="fit-modal-ship-render">
-                    <img src="${fit.ship.icon_url}" alt="${fit.ship.name}">
-                    <span>${fit.ship.name}</span>
-                 </div>`;
+        // --- 1. Ship Render Column (REMOVED) ---
 
         // --- 2. Slot Banks Column ---
         html += '<div class="fit-modal-slot-banks">';
@@ -932,21 +928,11 @@ It will be filled by the partial template on page load.
                         indentedListHtml = `<span class="fit-item-problem-tag">(Wrong Item)</span>`;
                     }
 
-                    // Add the "Make Sub" button if there's a potential match
-                    if (item.potential_matches && item.potential_matches.length > 0) {
-                        const match = item.potential_matches[0];
-                        buttonsHtml = `<div class="sub-action-buttons">
-                            <button class="fc-btn btn-approve js-sub-accept"
-                                data-problem-item-id="${item.type_id}"
-                                data-problem-item-name="${item.name}"
-                                data-missing-item-id="${match.type_id}"
-                                data-missing-item-name="${match.name}"
-                                title="Accept ${item.name} as substitute for ${match.name}">&#10003;</button>
-                        </div>`;
-                    }
+                    // --- REMOVED: "Make Sub" button ---
+                    // The buttonsHtml variable remains an empty string
                 }
 
-                html += buttonsHtml;
+                html += buttonsHtml; // This will be empty now
                 html += indentedListHtml;
                 // --- END NEW FC PART ---
 
@@ -1017,11 +1003,7 @@ It will be filled by the partial template on page load.
                 fitModalBody.innerHTML = buildSlottedFitHtml(data);
                 // --- END MODIFICATION ---
 
-                // --- MODIFIED: Add event listeners for the new buttons ---
-                fitModalBody.querySelectorAll('.js-sub-accept').forEach(button => {
-                    button.addEventListener('click', (event) => handleSubstitutionAction(event, 'accept'));
-                });
-                // --- END MODIFICATION ---
+                // --- REMOVED: Event listener for '.js-sub-accept' ---
 
             })
             .catch(error => {
@@ -1049,110 +1031,7 @@ It will be filled by the partial template on page load.
     // ---
 
 
-    // --- MODIFIED: Replaced showSubstitutionDropdown with handleSubstitutionAction ---
-    function handleSubstitutionAction(event, action) {
-        const button = event.target.closest('button');
-        if (!button) return;
-
-        // --- MODIFIED: Remove 'deny' logic ---
-        if (action === 'accept') {
-            const problemItemId = button.dataset.problemItemId;
-            const missingItemId = button.dataset.missingItemId;
-            const problemItemName = button.dataset.problemItemName;
-            const missingItemName = button.dataset.missingItemName;
-
-            const listItem = button.closest('li.fit-slot-item'); // --- MODIFIED: Use new selector ---
-
-            if (!missingItemId) {
-                alert("Missing doctrine item ID not found for substitution.");
-                return;
-            }
-
-            // Disable the button
-            button.disabled = true;
-
-            // --- MODIFIED: Use new custom confirm ---
-            const confirmMessage = `Add "<b>${problemItemName}</b>" as a substitute for "<b>${missingItemName}</b>"?`;
-
-            const performSubstitution = () => {
-                // This is the code that runs on "Confirm"
-                const formData = new FormData();
-                formData.append('base_item_id', missingItemId);
-                formData.append('substitute_item_id', problemItemId);
-
-                fetch("{% url 'waitlist:api_add_substitution' %}", {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken,
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        // --- MODIFIED: Change color, don't remove ---
-                        listItem.classList.remove('fit-item-problem');
-                        listItem.classList.add('fit-item-accepted-sub');
-
-                        // Remove the button container
-                        const buttonContainer = button.closest('.sub-action-buttons');
-                        if (buttonContainer) {
-                            buttonContainer.remove();
-                        }
-
-                        // Find and update the indented list
-                        const missingList = listItem.querySelector('.fit-item-missing-list');
-                        if (missingList) {
-                            missingList.classList.remove('fit-item-missing-list');
-                            missingList.classList.add('fit-item-sub-for-list'); // Change border color
-
-                            // Re-build content as "Substitutes for..."
-                            let subHtml = `<li class="fit-item-sub-for-item">`;
-                            const missingImg = missingList.querySelector('img');
-                            if (missingImg) {
-                                subHtml += missingImg.outerHTML;
-                            }
-                            subHtml += `<span>Substitutes for: ${missingItemName}</span>`;
-                            subHtml += `</li>`;
-                            missingList.innerHTML = subHtml;
-                        }
-
-                        // Don't show an alert, the visual change is the feedback
-                        // alert(data.message);
-                    } else {
-                        alert(`Error: ${data.message}`);
-                        button.disabled = false;
-                    }
-                })
-                .catch(error => {
-                    alert(`Network Error: ${error.message}`);
-                    button.disabled = false;
-                });
-            };
-
-            // Show the custom confirm box
-            showCustomConfirm(confirmMessage, performSubstitution);
-
-            // Re-enable button if user cancels (the 'cancel' button on the
-            // confirm modal will just hide the modal, so we must re-enable)
-            // We'll add a one-time listener to the cancel button for this.
-            const confirmCancelBtn = document.getElementById('custom-confirm-cancel-btn');
-            const confirmOkBtn = document.getElementById('custom-confirm-ok-btn');
-
-            const tempCancelListener = () => {
-                button.disabled = false;
-                confirmCancelBtn.removeEventListener('click', tempCancelListener);
-                confirmOkBtn.removeEventListener('click', tempCancelListener); // Also clear if they click OK
-            };
-            confirmCancelBtn.addEventListener('click', tempCancelListener);
-            confirmOkBtn.addEventListener('click', tempCancelListener); // Clean up listener
-            // --- END MODIFICATION ---
-
-        }
-        // --- No 'deny' logic ---
-    }
-    // --- END MODIFICATION ---
+    // --- REMOVED: handleSubstitutionAction function ---
 
 
     // Add close listeners for the modal
@@ -1246,6 +1125,82 @@ It will be filled by the partial template on page load.
         // if (pollingInterval) clearInterval(pollingInterval); // Clear old poller
         // pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
     }
+
+    // --- 5. PAGE INITIALIZATION ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Enable the X-Up button (it's disabled by default in base.html)
+        // We do this here so it's only enabled if the page loads correctly.
+        const xupButton = document.getElementById('xup-modal-button');
+        const openWaitlist = {{ open_waitlist.pk|default:"null" }};
+
+        if (xupButton && openWaitlist !== null) {
+            xupButton.disabled = false;
+        }
+
+        // Start all the interactive parts
+        initializeWaitlist();
+
+        // --- NEW: Start overview polling if FC ---
+        if (isFC && openWaitlist !== null) {
+            startFleetOverviewPolling();
+        }
+        // --- END NEW ---
+
+
+        // ---
+        // --- NEW: EventSource / Server-Sent Events (SSE) ---
+        // ---
+        // We replace the old pollingInterval with this.
+        console.log("Connecting to event stream /events/waitlist-updates/...");
+
+        // Connect to the event stream URL
+        // ---
+        // --- THIS IS THE FIX ---
+        // --- We pass the channel name as a query parameter, not a path ---
+        const eventSource = new EventSource("/events/?channel=waitlist-updates");
+        // ---
+        // --- END THE FIX ---
+        // ---
+
+        // --- THIS IS THE FIX: Listen for the 'update' event type ---
+        // The server sends events with type 'update', not the default 'message'.
+        eventSource.addEventListener('update', (event) => {
+            console.log("Received 'update' event from server:", event.data);
+            // We received an update!
+            // Call our existing function to refresh the HTML.
+            fetchWaitlistHTML();
+
+            // --- NEW: Also check if waitlist was closed ---
+            try {
+                const data = JSON.parse(event.data);
+                if (data.action === 'close') {
+                    console.log("Waitlist closed event received, stopping overview polling.");
+                    stopFleetOverviewPolling();
+                    // Reload the page to show the "waitlist closed" message
+                    window.location.reload();
+                }
+            } catch (e) {
+                // Ignore parse error, just fetch HTML
+            }
+            // --- END NEW ---
+        });
+        // --- END THE FIX ---
+
+        // Optional: Handle connection open
+        eventSource.onopen = (event) => {
+            console.log("EventSource connection opened.");
+        };
+
+        // Optional: Handle errors
+        eventSource.onerror = (event) => {
+            console.error("EventSource error:", event);
+            // Don't close, EventSource will try to reconnect automatically
+        };
+        // ---
+        // --- END NEW: EventSource ---
+        // ---
+    });
 
     // ---
     // --- NEW: FLEET OVERVIEW JAVASCRIPT (Moved from fc_admin.html)
@@ -1428,175 +1383,5 @@ It will be filled by the partial template on page load.
     // ---
     // --- END NEW FLEET OVERVIEW JAVASCRIPT
     // ---
-
-
-    // Add close listeners for the modal
-    if (fitModalOverlay) {
-        fitModalCloseBtn.addEventListener('click', closeFitModal);
-        fitModalCancelBtn.addEventListener('click', closeFitModal);
-        fitModalOverlay.addEventListener('click', (e) => {
-            if (e.target === fitModalOverlay) {
-                closeFitModal();
-            }
-        });
-    }
-
-
-    // This function sets up all our event listeners
-    function initializeWaitlist() {
-
-        // --- NEW: Add listeners for modal footer buttons ---
-        if (isFC) {
-            if(fitModalAcceptBtn) fitModalAcceptBtn.addEventListener('click', () => {
-                if (currentModalFitId) {
-                    // Reuse the existing FC action handler
-                    // We mock the 'event' object it expects
-                    const mockEvent = {
-                        target: {
-                            closest: () => ({
-                                dataset: {
-                                    fitId: currentModalFitId,
-                                    action: 'approve'
-                                }
-                            })
-                        }
-                    };
-                    handleFCAction(mockEvent);
-                    closeFitModal(); // Close modal after action
-                }
-            });
-
-            if(fitModalDenyBtn) fitModalDenyBtn.addEventListener('click', () => {
-                if (currentModalFitId) {
-                    const mockEvent = {
-                        target: {
-                            closest: () => ({
-                                dataset: {
-                                    fitId: currentModalFitId,
-                                    action: 'deny'
-                                }
-                            })
-                        }
-                    };
-                    handleFCAction(mockEvent);
-                    closeFitModal(); // Close modal after action
-                }
-            });
-        }
-        // --- END NEW ---
-
-        // --- 4. MODIFIED: Add event delegation ---
-        waitlistContainer.addEventListener('click', (event) => {
-            // Check for FC action click
-            const fcButton = event.target.closest('.fc-btn');
-            if (isFC && fcButton) {
-                // --- MODIFICATION: Route to correct handler ---
-                if (fcButton.classList.contains('btn-invite')) {
-                    handleFCInvite(event);
-                } else {
-                    handleFCAction(event);
-                }
-                // --- END MODIFICATION ---
-                return; // Stop processing
-            }
-
-            // Check for Fit Modal click
-            const fitModalButton = event.target.closest('.js-open-fit-modal');
-            if (isFC && fitModalButton) {
-                const fitId = fitModalButton.dataset.fitId;
-                openFitModal(fitId);
-                return; // Stop processing
-            }
-        });
-        // --- END MODIFICATION ---
-
-        // Run timers
-        updateWaitTimers(); // Run once on load
-        if (timerInterval) clearInterval(timerInterval); // Clear old timer
-        timerInterval = setInterval(updateWaitTimers, 10000); // Update timers every 10s
-
-        // ---
-        // --- REMOVED: Polling interval is no longer needed
-        // ---
-        // if (pollingInterval) clearInterval(pollingInterval); // Clear old poller
-        // pollingInterval = setInterval(fetchWaitlistHTML, 5000); // Poll every 5s
-    }
-
-    // --- 5. PAGE INITIALIZATION ---
-
-    document.addEventListener('DOMContentLoaded', () => {
-        // Enable the X-Up button (it's disabled by default in base.html)
-        // We do this here so it's only enabled if the page loads correctly.
-        const xupButton = document.getElementById('xup-modal-button');
-        const openWaitlist = {{ open_waitlist.pk|default:"null" }};
-
-        if (xupButton && openWaitlist !== null) {
-            xupButton.disabled = false;
-        }
-
-        // Start all the interactive parts
-        initializeWaitlist();
-
-        // --- NEW: Start overview polling if FC ---
-        if (isFC && openWaitlist !== null) {
-            startFleetOverviewPolling();
-        }
-        // --- END NEW ---
-
-
-        // ---
-        // --- NEW: EventSource / Server-Sent Events (SSE) ---
-        // ---
-        // We replace the old pollingInterval with this.
-        console.log("Connecting to event stream /events/waitlist-updates/...");
-
-        // Connect to the event stream URL
-        // ---
-        // --- THIS IS THE FIX ---
-        // --- We pass the channel name as a query parameter, not a path ---
-        const eventSource = new EventSource("/events/?channel=waitlist-updates");
-        // ---
-        // --- END THE FIX ---
-        // ---
-
-        // --- THIS IS THE FIX: Listen for the 'update' event type ---
-        // The server sends events with type 'update', not the default 'message'.
-        eventSource.addEventListener('update', (event) => {
-            console.log("Received 'update' event from server:", event.data);
-            // We received an update!
-            // Call our existing function to refresh the HTML.
-            fetchWaitlistHTML();
-
-            // --- NEW: Also check if waitlist was closed ---
-            try {
-                const data = JSON.parse(event.data);
-                if (data.action === 'close') {
-                    console.log("Waitlist closed event received, stopping overview polling.");
-                    stopFleetOverviewPolling();
-                    // Reload the page to show the "waitlist closed" message
-                    window.location.reload();
-                }
-            } catch (e) {
-                // Ignore parse error, just fetch HTML
-            }
-            // --- END NEW ---
-        });
-        // --- END THE FIX ---
-
-        // Optional: Handle connection open
-        eventSource.onopen = (event) => {
-            console.log("EventSource connection opened.");
-        };
-
-        // Optional: Handle errors
-        eventSource.onerror = (event) => {
-            console.error("EventSource error:", event);
-            // Don't close, EventSource will try to reconnect automatically
-        };
-        // ---
-        // --- END NEW: EventSource ---
-        // ---
-    });
-
 </script>
 {% endblock %}

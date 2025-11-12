@@ -306,16 +306,13 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
         
     logger.debug(f"Checking fit against {matching_doctrines.count()} doctrines for ship {ship_type_id}")
 
-    # 2. Build the manual substitution map
-    # { 'base_item_id_str': {set of allowed_ids_int} }
-    sub_groups = FitSubstitutionGroup.objects.prefetch_related('substitutes').all()
-    sub_map = {}
-    for group in sub_groups:
-        base_id_str = str(group.base_item_id)
-        allowed_ids = {sub.type_id for sub in group.substitutes.all()}
-        allowed_ids.add(group.base_item_id) # The base item is always allowed
-        sub_map[base_id_str] = allowed_ids
-    logger.debug(f"Loaded {len(sub_map)} manual substitution groups")
+    # ---
+    # --- REMOVED: Manual substitution map (FitSubstitutionGroup)
+    # ---
+    logger.debug("Manual substitution groups are disabled. Using ItemComparisonRule only.")
+    # ---
+    # --- END REMOVAL
+    # ---
 
 
     # 3. Get all EveType data for ALL items in ONE query
@@ -381,9 +378,9 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
             # 5a. Build the list of all allowed items for this "slot"
             allowed_ids_for_slot = {doctrine_type_id}
 
-            # 1. Get Manual Substitutions
-            if doctrine_type_id_str in sub_map:
-                allowed_ids_for_slot.update(sub_map[doctrine_type_id_str])
+            # ---
+            # --- REMOVED: Manual Substitutions check
+            # ---
 
             # MODIFICATION: Use new database-driven check
             # 2. Get Automatic "Equal or Better" Substitutions

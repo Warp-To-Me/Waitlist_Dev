@@ -194,18 +194,33 @@ class Command(BaseCommand):
         
         EveDogmaAttribute.objects.all().delete() # Clear old data
         
-        attributes = [
-            EveDogmaAttribute(
-                attribute_id=row['attributeID'],
-                name=row['displayName'] if pd.notna(row['displayName']) and row['displayName'] else row['attributeName'],
-                description=row['description'] if pd.notna(row['description']) else None,
-                icon_id=row['iconID'] if pd.notna(row['iconID']) else None,
-                unit_name=str(row['unitID']) if pd.notna(row['unitID']) else None # Store unitID for now
+        # --- NEW: Fix for 'nan' bug ---
+        attributes_to_create = []
+        for _, row in df.iterrows():
+            # Check for valid displayName
+            name = row['displayName']
+            if not pd.notna(name) or not name:
+                # Fallback to attributeName
+                name = row['attributeName']
+            
+            if not pd.notna(name) or not name:
+                # Absolute fallback if both are null/NaN
+                name = f"Attribute {row['attributeID']}" 
+                logger.warning(f"Found null/NaN name for attributeID {row['attributeID']}. Using fallback.")
+
+            attributes_to_create.append(
+                EveDogmaAttribute(
+                    attribute_id=row['attributeID'],
+                    name=name,
+                    description=row['description'] if pd.notna(row['description']) else None,
+                    icon_id=row['iconID'] if pd.notna(row['iconID']) else None,
+                    unit_name=str(row['unitID']) if pd.notna(row['unitID']) else None
+                )
             )
-            for _, row in df.iterrows()
-        ]
-        EveDogmaAttribute.objects.bulk_create(attributes, batch_size=1000)
-        logger.info(f"Imported {len(attributes)} dogma attributes.")
+            
+        EveDogmaAttribute.objects.bulk_create(attributes_to_create, batch_size=1000)
+        logger.info(f"Imported {len(attributes_to_create)} dogma attributes.")
+        # --- END NEW ---
 
     def import_dogma_type_attributes(self):
         # --- *** THIS IS THE FIX *** ---
