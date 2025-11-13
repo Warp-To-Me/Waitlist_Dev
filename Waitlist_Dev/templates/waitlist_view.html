@@ -585,6 +585,9 @@ It will be filled by the partial template on page load.
     // --- Check if user is an FC ---
     const isFC = {{ is_fc|yesno:"true,false" }};
 
+    // --- NEW: Get the current user's ID ---
+    const currentUserID = {{ request.user.id }};
+
     // --- 1. FC ACTION HANDLER (Approve/Deny) ---
 
     function handleFCAction(event) {
@@ -812,6 +815,8 @@ It will be filled by the partial template on page load.
     // --- NEW: Get modal footer buttons ---
     const fitModalAcceptBtn = document.getElementById('fit-detail-modal-accept-btn');
     const fitModalDenyBtn = document.getElementById('fit-detail-modal-deny-btn');
+    // --- NEW: Get pilot's update button ---
+    const fitModalUpdateBtn = document.getElementById('fit-detail-modal-update-btn');
 
     // --- NEW: Variable to store current fit ID ---
     let currentModalFitId = null;
@@ -970,11 +975,15 @@ It will be filled by the partial template on page load.
 
         // --- NEW: Store fitId and show footer buttons ---
         currentModalFitId = fitId;
-        if(fitModalAcceptBtn) fitModalAcceptBtn.style.display = 'inline-block';
-        if(fitModalDenyBtn) fitModalDenyBtn.style.display = 'inline-block';
+        // --- MODIFICATION: Hide all buttons by default ---
+        if(fitModalAcceptBtn) fitModalAcceptBtn.style.display = 'none';
+        if(fitModalDenyBtn) fitModalDenyBtn.style.display = 'none';
+        if(fitModalUpdateBtn) fitModalUpdateBtn.style.display = 'none';
+
         if(fitModalAcceptBtn) fitModalAcceptBtn.disabled = false;
         if(fitModalDenyBtn) fitModalDenyBtn.disabled = false;
-        // --- END NEW ---
+        if(fitModalUpdateBtn) fitModalUpdateBtn.disabled = false;
+        // --- END MODIFICATION ---
 
         // Show modal with spinner
         fitModalBody.innerHTML = '<div class="modal-spinner"></div>';
@@ -1005,6 +1014,26 @@ It will be filled by the partial template on page load.
 
                 // --- REMOVED: Event listener for '.js-sub-accept' ---
 
+                // ---
+                // --- NEW: Show correct buttons based on user role
+                // ---
+                const userIsOwner = (data.character_user_id === currentUserID);
+
+                if (isFC) {
+                    fitModalAcceptBtn.style.display = 'inline-block';
+                    fitModalDenyBtn.style.display = 'inline-block';
+                } else if (userIsOwner) {
+                    fitModalUpdateBtn.style.display = 'inline-block';
+                    // Store fit data on the button for the update function
+                    fitModalUpdateBtn.dataset.rawFit = data.raw_fit;
+                    fitModalUpdateBtn.dataset.characterId = data.character_id;
+                } else {
+                    // Not owner, not FC - all buttons remain hidden
+                }
+                // ---
+                // --- END NEW
+                // ---
+
             })
             .catch(error => {
                 fitModalBody.innerHTML = `<p style="color: #ff8a8a; padding: 20px;">Error: ${error.message}</p>`;
@@ -1019,8 +1048,13 @@ It will be filled by the partial template on page load.
             currentModalFitId = null;
             if(fitModalAcceptBtn) fitModalAcceptBtn.style.display = 'none';
             if(fitModalDenyBtn) fitModalDenyBtn.style.display = 'none';
+            // --- NEW: Hide update button on close ---
+            if(fitModalUpdateBtn) fitModalUpdateBtn.style.display = 'none';
+
             if(fitModalAcceptBtn) fitModalAcceptBtn.disabled = false;
             if(fitModalDenyBtn) fitModalDenyBtn.disabled = false;
+            // --- NEW: Reset update button ---
+            if(fitModalUpdateBtn) fitModalUpdateBtn.disabled = false;
             // --- END NEW ---
         }
     }
@@ -1028,6 +1062,57 @@ It will be filled by the partial template on page load.
     // ---
     // --- CUSTOM CONFIRM MODAL (REMOVED)
     // --- The function 'showCustomConfirm' is now in base.html
+    // ---
+
+
+    // ---
+    // --- NEW: PILOT UPDATE FIT HANDLER
+    // ---
+    function handleUpdateFitClick(event) {
+        const button = event.target;
+        const rawFit = button.dataset.rawFit;
+        const characterId = button.dataset.characterId;
+
+        // 1. Get X-Up Modal elements (from base.html)
+        const xupModalOverlay = document.getElementById('xup-modal-overlay');
+        const xupCharSelect = document.getElementById('xup-char-select');
+        const xupFitTextarea = document.getElementById('xup-fit-textarea');
+        const xupImplantContainer = document.getElementById('xup-implant-container');
+
+        if (!xupModalOverlay || !xupCharSelect || !xupFitTextarea) {
+            console.error("X-Up modal elements not found!");
+            return;
+        }
+
+        // 2. Close the fit detail modal
+        closeFitModal();
+
+        // 3. Pre-populate the X-Up modal
+        xupCharSelect.value = characterId;
+        xupFitTextarea.value = rawFit;
+
+        // 4. Trigger the change event on the select to load implants
+        // (This function is defined in base.html)
+        xupImplantContainer.innerHTML = '<div class="implant-spinner"></div>';
+        fetch(`{% url 'pilot:api_get_implants' %}?character_id=${characterId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    xupImplantContainer.innerHTML = data.html;
+                    startESITimer(data.expires_iso); // This function is in base.html
+                } else {
+                    throw new Error(data.message || 'Unknown error');
+                }
+            })
+            .catch(error => {
+                xupImplantContainer.innerHTML = `<p style="color: #ff8a8a;">Error: ${error.message}</p>`;
+            });
+
+        // 5. Open the X-Up modal
+        xupModalOverlay.classList.add('show');
+    }
+    // ---
+    // --- END NEW PILOT HANDLER
     // ---
 
 
@@ -1087,6 +1172,10 @@ It will be filled by the partial template on page load.
                 }
             });
         }
+        // --- NEW: Add listener for Pilot's Update button ---
+        if(fitModalUpdateBtn) {
+            fitModalUpdateBtn.addEventListener('click', handleUpdateFitClick);
+        }
         // --- END NEW ---
 
         // --- 4. MODIFIED: Add event delegation ---
@@ -1106,7 +1195,8 @@ It will be filled by the partial template on page load.
 
             // Check for Fit Modal click
             const fitModalButton = event.target.closest('.js-open-fit-modal');
-            if (isFC && fitModalButton) {
+            // --- MODIFICATION: Remove 'isFC' check ---
+            if (fitModalButton) {
                 const fitId = fitModalButton.dataset.fitId;
                 openFitModal(fitId);
                 return; // Stop processing

@@ -227,20 +227,33 @@ def api_get_doctrine_fit_details(request):
 def api_get_fit_details(request):
     """
     Returns the parsed fit JSON for the FC's inspection modal.
+    --- MODIFIED ---
+    Now also allows the pilot who submitted the fit to view it.
     """
-    if not is_fleet_commander(request.user):
-        logger.warning(f"Non-FC user {request.user.username} tried to get fit details")
-        return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
-        
+    # --- MODIFICATION: Get fit_id and fit *before* auth check ---
     fit_id = request.GET.get('fit_id')
-    logger.debug(f"FC {request.user.username} requesting fit details for fit_id {fit_id}")
+    logger.debug(f"User {request.user.username} requesting fit details for fit_id {fit_id}")
     if not fit_id:
         logger.warning("api_get_fit_details called without fit_id")
         return HttpResponseBadRequest("Missing fit_id")
         
     try:
         fit = get_object_or_404(ShipFit, id=fit_id)
+    except Http404:
+        logger.warning(f"User {request.user.username} requested fit {fit_id}, but it was not found")
+        return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
+
+    # --- MODIFICATION: Check if user is FC OR owner ---
+    is_fc = is_fleet_commander(request.user)
+    is_owner = (fit.character.user == request.user)
+
+    if not is_fc and not is_owner:
+        logger.warning(f"User {request.user.username} tried to get fit details for fit {fit_id} which they do not own")
+        return JsonResponse({"status": "error", "message": "Not authorized"}, status=403)
         
+    logger.debug(f"User {request.user.username} authorized for fit {fit_id} (FC: {is_fc}, Owner: {is_owner})")
+        
+    try:
         # 1. Get the ship's EveType and base slot counts
         ship_eve_type = EveType.objects.filter(type_id=fit.ship_type_id).first()
         if not ship_eve_type:
@@ -475,17 +488,21 @@ def api_get_fit_details(request):
                                 
                                 if is_equal_or_better:
                                     # ---
-                                    # --- THIS IS THE FIX (Part 2):
-                                    # --- Check if the slot is still available in our "copy" list
+                                    # --- THIS IS THE FIX:
+                                    # ---
+                                    
+                                    # 1. ALWAYS populate 'substitutes_for' if the item is a valid sub.
+                                    item_obj['substitutes_for'] = [{
+                                        "name": doctrine_item_type.name,
+                                        "type_id": doctrine_item_type.type_id,
+                                        "icon_url": f"https://images.evetech.net/types/{doctrine_item_type.type_id}/icon?size=32",
+                                        "quantity": doctrine_items_to_fill.get(str(doctrine_item_type.type_id), 0)
+                                    }]
+                                    
+                                    # 2. THEN, check if a slot is available to consume.
                                     if doctrine_items_to_fill_copy.get(doctrine_id_str, 0) > 0:
-                                        # Slot is available, consume it
+                                        # Slot is available, consume it and mark as accepted.
                                         item_obj['status'] = 'accepted_sub'
-                                        item_obj['substitutes_for'] = [{
-                                            "name": doctrine_item_type.name,
-                                            "type_id": doctrine_item_type.type_id,
-                                            "icon_url": f"https://images.evetech.net/types/{doctrine_item_type.type_id}/icon?size=32",
-                                            "quantity": doctrine_items_to_fill.get(str(doctrine_item_type.type_id), 0)
-                                        }]
                                         doctrine_items_to_fill_copy[doctrine_id_str] -= qty_in_fit
                                     else:
                                         # This is a valid sub, but the slot is already filled.
@@ -626,6 +643,11 @@ def api_get_fit_details(request):
         return JsonResponse({
             "status": "success",
             "name": f"{fit.character.character_name} vs. {doctrine_name}",
+            # --- NEW: Add raw_fit and character_id for the update logic ---
+            "raw_fit": fit.raw_fit,
+            "character_id": fit.character.character_id,
+            "character_user_id": fit.character.user.id,
+            # --- END NEW ---
             "slotted_fit": {
                 "ship": {
                     "type_id": ship_eve_type.type_id,
@@ -640,9 +662,6 @@ def api_get_fit_details(request):
             "doctrine_name": doctrine_name
         })
 
-    except Http404:
-        logger.warning(f"FC {request.user.username} requested fit {fit_id}, but it was not found")
-        return JsonResponse({"status": "error", "message": "Fit not found"}, status=404)
     except Exception as e:
         import traceback
         traceback.print_exc()

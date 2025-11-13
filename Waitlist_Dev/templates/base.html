@@ -895,7 +895,6 @@
     {% endif %}
     <!-- --- END NEW MODAL --- -->
     <!-- --- NEW: FC FIT DETAIL MODAL --- -->
-    {% if is_fc %}
     <div class="modal-overlay" id="fit-detail-modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -910,7 +909,10 @@
 
             <div class="modal-footer">
                 <div class="modal-actions">
-                    <!-- --- NEW: Accept/Deny Fit Buttons --- -->
+                    <!-- --- NEW: Update Fit Button (for pilots) --- -->
+                    <button class="header-btn xup-btn" id="fit-detail-modal-update-btn" style="display: none;">Update Fit</button>
+                    <!-- --- END NEW --- -->
+                    <!-- --- FC Buttons --- -->
                     <button class="header-btn btn-approve" id="fit-detail-modal-accept-btn" style="display: none;">Accept Fit</button>
                     <button class="header-btn btn-deny" id="fit-detail-modal-deny-btn" style="display: none;">Deny Fit</button>
                     <!-- --- END NEW --- -->
@@ -919,7 +921,6 @@
             </div>
         </div>
     </div>
-    {% endif %}
     <!-- --- END NEW FC MODAL --- -->
     <!-- ---
     --- NEW: DOCTRINE FIT MODAL (for public fittings page)
