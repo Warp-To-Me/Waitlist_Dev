@@ -441,10 +441,21 @@ def check_fit_against_doctrines(ship_type_id, submitted_fit_summary: dict):
                         continue
                     
                     # Run the "Equal or Better" check
-                    if (submitted_item_type.group_id == doctrine_item_type.group_id and
-                        submitted_item_type.group.category_id == doctrine_item_type.group.category_id):
+                    # ---
+                    # --- MODIFICATION: Revert to GROUP check ---
+                    # ---
+                    # Check if they are in the same GROUP
+                    if (submitted_item_type.group_id == doctrine_item_type.group_id):
+                    
+                        # ---
+                        # --- THIS IS THE FIX ---
+                        # ---
+                        # Initialize to True *only if* there are rules to run.
+                        is_equal_or_better = bool(comparison_rules)
+                        # ---
+                        # --- END THE FIX ---
+                        # ---
                         
-                        is_equal_or_better = True
                         for rule in comparison_rules:
                             # Use the new helper that reads from the cache
                             doctrine_val = _get_attribute_value_from_item(doctrine_item_type, rule.attribute.attribute_id)

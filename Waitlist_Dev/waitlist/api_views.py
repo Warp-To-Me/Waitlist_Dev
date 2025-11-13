@@ -382,16 +382,32 @@ def api_get_fit_details(request):
                             if not doctrine_item_type or not doctrine_item_type.group:
                                 continue
 
-                            # Check group and category
-                            if (doctrine_item_type.group_id == item_type.group_id and
-                                doctrine_item_type.group.category_id == item_type.group.category_id):
+                            # ---
+                            # --- MODIFICATION: Revert to GROUP check ---
+                            # ---
+                            # Check if they are in the same GROUP (e.g. both are 'Shield Hardener')
+                            if (doctrine_item_type.group_id == item_type.group_id):
+                            
+                                comparison_rules = rules_by_group.get(doctrine_item_type.group_id, [])
                                 
-                                comparison_rules = rules_by_group.get(item_type.group_id, [])
                                 if not comparison_rules:
-                                    continue # No rules, so no auto-sub
+                                    # ---
+                                    # --- NEW: If no rules, this is a failed match but not a sub
+                                    # ---
+                                    item_obj['status'] = 'problem'
+                                    found_match = True
+                                    break # Exit inner loop
                                 
-                                is_equal_or_better = True
-                                failure_reasons = []
+                                # ---
+                                # --- THIS IS THE FIX ---
+                                # ---
+                                # Initialize to True *only if* there are rules to run.
+                                # If rules are empty, it stays False, and fails.
+                                is_equal_or_better = bool(comparison_rules)
+                                # ---
+                                # --- END THE FIX ---
+                                # ---
+                                failure_reasons = [] 
                                 for rule in comparison_rules:
                                     attr_id = rule.attribute.attribute_id
                                     doctrine_val = _get_attribute_value_from_item(doctrine_item_type, attr_id)
@@ -424,7 +440,7 @@ def api_get_fit_details(request):
                                     }]
                                     doctrine_items_to_fill_copy[doctrine_id_str] -= qty_in_fit
                                     found_match = True
-                                    break
+                                    break # This break is CORRECT (we found a valid sub)
                                 else:
                                     item_obj['status'] = 'problem'
                                     item_obj['failure_reasons'] = failure_reasons
@@ -435,7 +451,15 @@ def api_get_fit_details(request):
                                         "quantity": doctrine_items_to_fill_copy.get(str(doctrine_item_type.type_id), 0)
                                     }]
                                     found_match = True
+                                    # ---
+                                    # --- THIS IS THE FIX: ---
+                                    # --- We must break here, because we have found
+                                    # --- the item this is supposed to replace, and it FAILED.
+                                    # --- We don't want to compare it to anything else.
                                     break
+                                    # ---
+                                    # --- END THE FIX ---
+                                    # ---
                         
                         if not found_match:
                              item_obj['status'] = 'problem' # No match found
