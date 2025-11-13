@@ -9,6 +9,10 @@ from .models import (
 )
 # Import logging
 import logging
+# --- NEW: Import models ---
+from django.db import models
+# --- END NEW ---
+
 # Get a logger for this specific Python file
 logger = logging.getLogger(__name__)
 

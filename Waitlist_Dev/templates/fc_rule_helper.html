@@ -19,7 +19,7 @@
         margin-top: 0;
     }
 
-    /* --- NEW: Header Bar --- */
+    /* --- Header Bar --- */
     .rule-header-bar {
         display: flex;
         flex-wrap: wrap; /* Allow wrapping on small screens */
@@ -32,7 +32,7 @@
         margin-bottom: 20px;
     }
 
-    /* --- NEW: Tab Styles --- */
+    /* --- Tab Styles --- */
     .rule-tabs {
         display: flex;
         gap: 5px;
@@ -63,7 +63,7 @@
             color: #fff;
         }
 
-    /* --- NEW: Search Input --- */
+    /* --- Search Input --- */
     .rule-search-container {
         flex-grow: 1; /* Allow it to take space */
         min-width: 250px; /* Minimum width */
@@ -81,14 +81,52 @@
         box-sizing: border-box; /* Include padding in width */
     }
 
-    /* --- NEW: Tab Content --- */
+    /* --- Tab Content --- */
     .tab-content {
         display: none; /* Hidden by default */
+        /* --- NEW: For loading spinner --- */
+        position: relative;
+        min-height: 200px;
     }
 
         .tab-content.active {
             display: block; /* Shown when active */
         }
+
+    /* --- NEW: Loading Spinner --- */
+    .tab-loading-spinner {
+        position: absolute;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 40px;
+        border: 5px solid #555;
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        z-index: 10;
+        display: none; /* Hidden by default */
+    }
+
+    .tab-content.is-loading .tab-loading-spinner {
+        display: block;
+    }
+
+    .tab-content.is-loading .rule-table-container,
+    .tab-content.is-loading .ship-specific-section,
+    .tab-content.is-loading .rule-group-card,
+    .tab-content.is-loading > p {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+    /* --- END NEW --- */
 
 
     /* Button Styles (from fc_admin.html) */
@@ -119,6 +157,56 @@
             background-color: #28a745;
         }
 
+    /* --- NEW: Edit/Delete Button Styles --- */
+    .btn-edit-rule,
+    .btn-delete-rule,
+    .btn-unignore-rule,
+    .btn-save-rule {
+        border: none;
+        border-radius: 4px;
+        color: #fff;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 0.9em;
+        padding: 4px 8px;
+        transition: background-color 0.2s;
+    }
+
+    .btn-delete-rule {
+        background: #993333;
+    }
+
+        .btn-delete-rule:hover {
+            background: #b33a3a;
+        }
+
+    .btn-edit-rule {
+        background: #a67c00;
+    }
+
+        .btn-edit-rule:hover {
+            background: #c99900;
+        }
+
+    .btn-unignore-rule {
+        background: #218838;
+    }
+
+        .btn-unignore-rule:hover {
+            background: #28a745;
+        }
+
+    .btn-save-rule {
+        background: #3b5998;
+    }
+
+        .btn-save-rule:hover {
+            background: #4e71bb;
+        }
+
+    /* --- END NEW --- */
+
+
     /* Message styles */
     .message {
         padding: 10px 15px;
@@ -127,7 +215,7 @@
         font-weight: 500;
         font-size: 0.95em;
     }
-
+    /* ... existing message styles ... */
     .message-success {
         background: #28a745;
         color: #fff;
@@ -143,7 +231,7 @@
         color: #fff;
     }
 
-    /* --- NEW: Ship-Specific Section --- */
+    /* --- Ship-Specific Section --- */
     .ship-specific-section {
         margin-bottom: 20px;
     }
@@ -156,21 +244,22 @@
             border-bottom: 1px solid #444;
         }
 
-    /* --- NEW: Rule Group Card Styles --- */
+        .ship-specific-section.is-hidden {
+            display: none;
+        }
+
+    /* --- Rule Group Card Styles --- */
     .rule-group-card {
         background: #333;
         border-radius: 8px;
         margin-bottom: 10px;
-        /* --- NEW: Transition for save/ignore fade --- */
         transition: opacity 0.5s ease, max-height 0.5s ease, margin 0.5s ease, padding 0.5s ease;
     }
 
-        /* --- NEW: Hidden class for search --- */
         .rule-group-card.is-hidden {
             display: none;
         }
 
-        /* --- NEW: Class for fade out on save/ignore --- */
         .rule-group-card.is-saved {
             opacity: 0;
             max-height: 0;
@@ -199,7 +288,6 @@
         color: #fff;
     }
 
-    /* --- NEW: Expando Button --- */
     .expando-btn {
         font-size: 1.5em;
         font-weight: bold;
@@ -212,7 +300,6 @@
         transform: rotate(45deg);
     }
 
-    /* --- NEW: Ignore Button --- */
     .btn-ignore {
         background: none;
         border: none;
@@ -231,9 +318,8 @@
     .expando-btn {
         margin-left: auto; /* Push expando to the right */
     }
-    /* --- END NEW --- */
 
-    /* --- NEW: Collapsible Body --- */
+    /* --- Collapsible Body --- */
     .rule-group-body {
         max-height: 0;
         overflow: hidden;
@@ -244,7 +330,6 @@
         max-height: 1000px; /* Large value */
         transition: max-height 0.5s ease-in;
     }
-    /* --- END NEW --- */
 
     .rule-table-container {
         padding: 15px;
@@ -279,7 +364,7 @@
                 width: 50px;
                 text-align: center;
             }
-
+            /* ... existing rule-table styles ... */
             /* Higher/Lower column */
             .rule-table th:nth-child(3),
             .rule-table td:nth-child(3) {
@@ -296,6 +381,51 @@
         .rule-table tr:last-child td {
             border-bottom: none;
         }
+
+        /* --- Styles for Edit Rules Table --- */
+        .rule-table .col-type {
+            width: 120px;
+            font-weight: 500;
+        }
+
+        .rule-table .col-type-global {
+            color: #a3d9ff;
+        }
+
+        .rule-table .col-type-specific {
+            color: #d8a3ff;
+        }
+
+        .rule-table .col-ship {
+            width: 150px;
+        }
+
+        .rule-table .col-group {
+            width: 200px;
+        }
+
+        .rule-table .col-logic {
+            width: 130px;
+        }
+
+        .rule-table .col-actions {
+            /* --- MODIFIED: Wider for two buttons --- */
+            width: 130px;
+            text-align: right;
+        }
+
+    text-align: right;
+    }
+    /* --- NEW: Action button container --- */
+    .rule-actions-container {
+        display: flex;
+        gap: 5px;
+        justify-content: flex-end;
+        /* --- NEW: Allow wrapping for more buttons --- */
+        flex-wrap: wrap;
+    }
+    /* --- END NEW --- */
+
 
     .attr-desc {
         font-size: 0.9em;
@@ -340,11 +470,14 @@
         <div class="rule-tabs">
             <button class="tab-btn active" data-tab="global-rules">Global Rules</button>
             <button class="tab-btn" data-tab="specific-rules">Ship-Specific Rules</button>
+            <button class="tab-btn" data-tab="edit-rules">Edit Existing Rules</button>
+            <!-- --- NEW: Ignored Tab --- -->
+            <button class="tab-btn" data-tab="ignored-groups">Manage Ignored</button>
         </div>
 
         <!-- SEARCH -->
         <div class="rule-search-container">
-            <input type="text" id="rule-search-input" placeholder="Search by group or ship name...">
+            <input type="text" id="rule-search-input" placeholder="Search by group, ship, or attribute...">
         </div>
 
         <!-- SAVE BUTTON -->
@@ -357,60 +490,14 @@
     ===============================
     -->
     <div class="tab-content active" id="global-rules">
-        {% for group in global_unruled_data %}
-        <div class="rule-group-card"
-             data-group-id="{{ group.group_id }}"
-             data-group-name="{{ group.group_name|lower }}">
-
-            <div class="rule-group-header">
-                <span class="rule-group-title">{{ group.group_name }}</span>
-                <!-- NEW: Ignore Button -->
-                <button class="btn-ignore" title="Ignore this group (don't show it here anymore)">&times;</button>
-                <!-- NEW: Expando Button -->
-                <span class="expando-btn">+</span>
-            </div>
-
-            <!-- NEW: Collapsible Body -->
-            <div class="rule-group-body">
-                <div class="rule-table-container">
-                    <table class="rule-table">
-                        <thead>
-                            <tr>
-                                <th>Use?</th>
-                                <th>Attribute Name</th>
-                                <th>Logic</th>
-                                <th>Unit</th>
-                                <th>Description</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for attr in group.attributes %}
-                            <tr data-attr-id="{{ attr.attr_id }}">
-                                <td>
-                                    <input type="checkbox" class="rule-checkbox">
-                                </td>
-                                <td>{{ attr.attr_name }}</td>
-                                <td>
-                                    <select class="rule-select" disabled>
-                                        <option value="true">Higher is Better</option>
-                                        <option value="false">Lower is Better</option>
-                                    </select>
-                                </td>
-                                <td>{{ attr.unit_name|default:"-" }}</td>
-                                <td>
-                                    {{ attr.description|truncatewords:20|default:"-" }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <!-- END Collapsible Body -->
+        <!-- --- MODIFIED: Container for JS rendering --- -->
+        <div class="tab-loading-spinner"></div>
+        <div id="global-rules-container">
+            <!-- Content will be rendered here by JavaScript -->
         </div>
-        {% empty %}
-        <p>No un-configured global item groups found in your doctrines. (Or you've ignored them all!)</p>
-        {% endfor %}
+        <p id="global-rules-empty-msg" style="display: none;">
+            No un-configured global item groups found in your doctrines. (Or you've ignored them all!)
+        </p>
     </div>
 
     <!--
@@ -419,65 +506,70 @@
     ===============================
     -->
     <div class="tab-content" id="specific-rules">
-        {% for ship in specific_unruled_data %}
-        <section class="ship-specific-section" data-ship-name="{{ ship.ship_name|lower }}">
-            <h2>{{ ship.ship_name }}</h2>
+        <!-- --- MODIFIED: Container for JS rendering --- -->
+        <div class="tab-loading-spinner"></div>
+        <div id="specific-rules-container">
+            <!-- Content will be rendered here by JavaScript -->
+        </div>
+        <p id="specific-rules-empty-msg" style="display: none;">
+            No un-configured ship-specific item groups found in your doctrines. (Or you've ignored them all!)
+        </p>
+    </div>
 
-            {% for group in ship.groups %}
-            <div class="rule-group-card"
-                 data-group-id="{{ group.group_id }}"
-                 data-group-name="{{ group.group_name|lower }}"
-                 data-ship-id="{{ ship.ship_id }}">
-                <!-- NEW: Ship ID -->
+    <!--
+    ===============================
+    TAB 3: EDIT EXISTING RULES
+    ===============================
+    -->
+    <div class="tab-content" id="edit-rules">
+        <!-- --- MODIFIED: Container for JS rendering --- -->
+        <div class="tab-loading-spinner"></div>
+        <div class="rule-table-container">
+            <table class="rule-table">
+                <thead>
+                    <tr>
+                        <th class="col-type">Rule Type</th>
+                        <th class="col-ship">Ship</th>
+                        <th class="col-group">Group</th>
+                        <th>Attribute</th>
+                        <th class="col-logic">Logic</th>
+                        <th class="col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="existing-rules-tbody">
+                    <!-- Content will be rendered here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        <p id="existing-rules-empty-msg" style="display: none;">
+            No comparison rules have been created yet.
+        </p>
+    </div>
 
-                <div class="rule-group-header">
-                    <span class="rule-group-title">{{ group.group_name }}</span>
-                    <!-- This "ignore" button is still for the GROUP, not the ship-group combo -->
-                    <button class="btn-ignore" title="Ignore this group (don't show it here anymore)">&times;</button>
-                    <span class="expando-btn">+</span>
-                </div>
-
-                <div class="rule-group-body">
-                    <div class="rule-table-container">
-                        <table class="rule-table">
-                            <thead>
-                                <tr>
-                                    <th>Use?</th>
-                                    <th>Attribute Name</th>
-                                    <th>Logic</th>
-                                    <th>Unit</th>
-                                    <th>Description</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for attr in group.attributes %}
-                                <tr data-attr-id="{{ attr.attr_id }}">
-                                    <td>
-                                        <input type="checkbox" class="rule-checkbox">
-                                    </td>
-                                    <td>{{ attr.attr_name }}</td>
-                                    <td>
-                                        <select class="rule-select" disabled>
-                                            <option value="true">Higher is Better</option>
-                                            <option value="false">Lower is Better</option>
-                                        </select>
-                                    </td>
-                                    <td>{{ attr.unit_name|default:"-" }}</td>
-                                    <td>
-                                        {{ attr.description|truncatewords:20|default:"-" }}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </section>
-        {% empty %}
-        <p>No un-configured ship-specific item groups found in your doctrines. (Or you've ignored them all!)</p>
-        {% endfor %}
+    <!--
+    ===============================
+    TAB 4: MANAGE IGNORED GROUPS
+    ===============================
+    -->
+    <div class="tab-content" id="ignored-groups">
+        <!-- --- MODIFIED: Container for JS rendering --- -->
+        <div class="tab-loading-spinner"></div>
+        <div class="rule-table-container">
+            <table class="rule-table">
+                <thead>
+                    <tr>
+                        <th class="col-group">Ignored Group Name</th>
+                        <th class="col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ignored-groups-tbody">
+                    <!-- Content will be rendered here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        <p id="ignored-groups-empty-msg" style="display: none;">
+            No groups are currently being ignored.
+        </p>
     </div>
 
 </div>
@@ -490,23 +582,34 @@
 
         const saveButton = document.getElementById('save-rules-btn');
         const messageContainer = document.getElementById('message-container');
+
+        // --- NEW: API URLs ---
+        const dataUrl = "{% url 'waitlist:api_fc_get_rule_helper_data' %}";
         const saveUrl = "{% url 'waitlist:api_fc_save_comparison_rules' %}";
-        // --- NEW: Ignore URL ---
         const ignoreUrl = "{% url 'waitlist:api_fc_ignore_rule_group' %}";
+        const deleteUrl = "{% url 'waitlist:api_fc_delete_comparison_rule' %}";
+        const editUrl = "{% url 'waitlist:api_fc_edit_comparison_rule' %}";
+        const unignoreUrl = "{% url 'waitlist:api_fc_unignore_rule_group' %}";
         const csrfToken = "{{ csrf_token }}";
 
-        // --- NEW: Search/Expando/Tab Elements ---
+        // --- Tab Elements ---
         const searchInput = document.getElementById('rule-search-input');
         const allTabButtons = document.querySelectorAll('.tab-btn');
         const allTabContents = document.querySelectorAll('.tab-content');
-        const allGroupCards = document.querySelectorAll('.rule-group-card');
-        const allShipSections = document.querySelectorAll('.ship-specific-section');
-        // --- END NEW ---
+
+        // --- Tab Content Containers ---
+        const globalRulesContainer = document.getElementById('global-rules-container');
+        const globalRulesEmptyMsg = document.getElementById('global-rules-empty-msg');
+        const specificRulesContainer = document.getElementById('specific-rules-container');
+        const specificRulesEmptyMsg = document.getElementById('specific-rules-empty-msg');
+        const existingRulesTbody = document.getElementById('existing-rules-tbody');
+        const existingRulesEmptyMsg = document.getElementById('existing-rules-empty-msg');
+        const ignoredGroupsTbody = document.getElementById('ignored-groups-tbody');
+        const ignoredGroupsEmptyMsg = document.getElementById('ignored-groups-empty-msg');
 
         // --- Helper to show messages ---
         function showMessage(type, text) {
             messageContainer.innerHTML = `<div class="message message-${type}">${text}</div>`;
-            // Auto-clear message
             setTimeout(() => {
                 if (messageContainer.firstElementChild && messageContainer.firstElementChild.textContent === text) {
                      messageContainer.innerHTML = "";
@@ -519,104 +622,322 @@
         // ---
         allTabButtons.forEach(button => {
             button.addEventListener('click', () => {
-                // Get target tab content
                 const targetId = button.dataset.tab;
                 const targetContent = document.getElementById(targetId);
 
-                // Deactivate all
                 allTabButtons.forEach(btn => btn.classList.remove('active'));
                 allTabContents.forEach(content => content.classList.remove('active'));
 
-                // Activate target
                 button.classList.add('active');
                 if (targetContent) {
                     targetContent.classList.add('active');
                 }
 
-                // --- NEW: Trigger search filter when switching tabs ---
-                filterCards();
+                if (targetId === 'edit-rules' || targetId === 'ignored-groups') {
+                    saveButton.style.display = 'none';
+                } else {
+                    saveButton.style.display = 'inline-block';
+                }
+                // Re-run filter on tab switch
+                filterContent();
             });
         });
 
         // ---
-        // --- 2. SEARCH FILTERING
+        // --- 2. SEARCH FILTERING (Renamed from filterCards)
         // ---
-        function filterCards() {
+        function filterContent() {
             const query = searchInput.value.toLowerCase().trim();
             const activeTabId = document.querySelector('.tab-btn.active').dataset.tab;
 
-            if (activeTabId === 'global-rules') {
-                // Filter GLOBAL cards
-                allGroupCards.forEach(card => {
-                    // Only filter cards in the global tab
-                    if (card.closest('#global-rules')) {
-                        const groupName = card.dataset.groupName;
-                        const isMatch = groupName.includes(query);
-                        card.classList.toggle('is-hidden', !isMatch);
+            // --- Filter GLOBAL cards ---
+            document.querySelectorAll('#global-rules .rule-group-card').forEach(card => {
+                const groupName = card.dataset.groupName;
+                const isMatch = groupName.includes(query);
+                card.classList.toggle('is-hidden', !isMatch || activeTabId !== 'global-rules');
+            });
+
+            // --- Filter SPECIFIC cards ---
+            document.querySelectorAll('#specific-rules .ship-specific-section').forEach(section => {
+                const shipName = section.dataset.shipName;
+                let shipHasVisibleGroups = false;
+                section.querySelectorAll('.rule-group-card').forEach(card => {
+                    const groupName = card.dataset.groupName;
+                    const isMatch = shipName.includes(query) || groupName.includes(query);
+                    card.classList.toggle('is-hidden', !isMatch);
+                    if(isMatch) {
+                        shipHasVisibleGroups = true;
                     }
                 });
-                // Hide all ship sections
-                allShipSections.forEach(section => section.classList.toggle('is-hidden', true));
+                section.classList.toggle('is-hidden', !shipHasVisibleGroups || activeTabId !== 'specific-rules');
+            });
 
-            } else if (activeTabId === 'specific-rules') {
-                // Filter SPECIFIC cards
-                // This is more complex: filter ships, then groups
-                allShipSections.forEach(section => {
-                    const shipName = section.dataset.shipName;
-                    let shipHasVisibleGroups = false;
-
-                    section.querySelectorAll('.rule-group-card').forEach(card => {
-                        const groupName = card.dataset.groupName;
-                        const isMatch = shipName.includes(query) || groupName.includes(query);
-                        card.classList.toggle('is-hidden', !isMatch);
-                        if(isMatch) {
-                            shipHasVisibleGroups = true;
-                        }
-                    });
-
-                    // Hide the whole ship section if no groups match
-                    section.classList.toggle('is-hidden', !shipHasVisibleGroups);
+            // --- Filter EDIT RULES table ---
+            if (existingRulesTbody) {
+                existingRulesTbody.querySelectorAll('.existing-rule-row').forEach(row => {
+                    const searchTerms = row.dataset.searchTerms;
+                    const isMatch = searchTerms.includes(query);
+                    row.classList.toggle('is-hidden', !isMatch || activeTabId !== 'edit-rules');
                 });
-                // Hide all global cards
-                allGroupCards.forEach(card => {
-                    if (card.closest('#global-rules')) {
-                        card.classList.toggle('is-hidden', true);
-                    }
+            }
+
+            // --- Filter IGNORED GROUPS table ---
+            if (ignoredGroupsTbody) {
+                ignoredGroupsTbody.querySelectorAll('.ignored-group-row').forEach(row => {
+                    const searchTerms = row.dataset.searchTerms;
+                    const isMatch = searchTerms.includes(query);
+                    row.classList.toggle('is-hidden', !isMatch || activeTabId !== 'ignored-groups');
                 });
             }
         }
-        searchInput.addEventListener('input', filterCards);
+        searchInput.addEventListener('input', filterContent);
 
         // ---
-        // --- 3. EXPANDO / CARD LOGIC
+        // --- 3. DATA LOADING AND RENDERING ---
         // ---
+
+        // Function to set loading state
+        function setLoadingState(isLoading) {
+            allTabContents.forEach(tab => {
+                tab.classList.toggle('is-loading', isLoading);
+            });
+        }
+
+        // --- Render GLOBAL Rules ---
+        function renderGlobalRules(data) {
+            let html = '';
+            data.forEach(group => {
+                html += `
+                <div class="rule-group-card" data-group-id="${group.group_id}" data-group-name="${group.group_name.toLowerCase()}">
+                    <div class="rule-group-header">
+                        <span class="rule-group-title">${group.group_name}</span>
+                        <button class="btn-ignore" title="Ignore this group">&times;</button>
+                        <span class="expando-btn">+</span>
+                    </div>
+                    <div class="rule-group-body">
+                        <div class="rule-table-container">
+                            <table class="rule-table">
+                                <thead>
+                                    <tr>
+                                        <th>Use?</th>
+                                        <th>Attribute Name</th>
+                                        <th>Logic</th>
+                                        <th>Unit</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${group.attributes.map(attr => `
+                                    <tr data-attr-id="${attr.attr_id}">
+                                        <td><input type="checkbox" class="rule-checkbox"></td>
+                                        <td>${attr.attr_name}</td>
+                                        <td>
+                                            <select class="rule-select" disabled>
+                                                <option value="true">Higher is Better</option>
+                                                <option value="false">Lower is Better</option>
+                                            </select>
+                                        </td>
+                                        <td>${attr.unit_name || "-"}</td>
+                                        <td>${attr.description ? attr.description.substring(0, 100) : "-"}</td>
+                                    </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            globalRulesContainer.innerHTML = html;
+            globalRulesEmptyMsg.style.display = data.length === 0 ? 'block' : 'none';
+        }
+
+        // --- Render SPECIFIC Rules ---
+        function renderSpecificRules(data) {
+            let html = '';
+            data.forEach(ship => {
+                html += `
+                <section class="ship-specific-section" data-ship-name="${ship.ship_name.toLowerCase()}">
+                    <h2>${ship.ship_name}</h2>
+                    ${ship.groups.map(group => `
+                    <div class="rule-group-card" data-group-id="${group.group_id}" data-group-name="${group.group_name.toLowerCase()}" data-ship-id="${ship.ship_id}">
+                        <div class="rule-group-header">
+                            <span class="rule-group-title">${group.group_name}</span>
+                            <button class="btn-ignore" title="Ignore this group">&times;</button>
+                            <span class="expando-btn">+</span>
+                        </div>
+                        <div class="rule-group-body">
+                            <div class="rule-table-container">
+                                <table class="rule-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Use?</th>
+                                            <th>Attribute Name</th>
+                                            <th>Logic</th>
+                                            <th>Unit</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${group.attributes.map(attr => `
+                                        <tr data-attr-id="${attr.attr_id}">
+                                            <td><input type="checkbox" class="rule-checkbox"></td>
+                                            <td>${attr.attr_name}</td>
+                                            <td>
+                                                <select class="rule-select" disabled>
+                                                    <option value="true">Higher is Better</option>
+                                                    <option value="false">Lower is Better</option>
+                                                </select>
+                                            </td>
+                                            <td>${attr.unit_name || "-"}</td>
+                                            <td>${attr.description ? attr.description.substring(0, 100) : "-"}</td>
+                                        </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    `).join('')}
+                </section>`;
+            });
+            specificRulesContainer.innerHTML = html;
+            specificRulesEmptyMsg.style.display = data.length === 0 ? 'block' : 'none';
+        }
+
+        // --- Render EXISTING Rules ---
+        function renderExistingRules(data) {
+            let html = '';
+            data.forEach(rule => {
+                const ruleTypeClass = rule.is_specific ? 'col-type-specific' : 'col-type-global';
+                const ruleTypeText = rule.is_specific ? 'Ship-Specific' : 'Global';
+                const searchTerms = `${rule.is_specific ? rule.ship_name.toLowerCase() : ''} ${rule.group_name.toLowerCase()} ${rule.attribute_name.toLowerCase()}`;
+
+                // --- NEW: Add "Make Global" button if specific ---
+                const makeGlobalButton = rule.is_specific
+                    ? `<button class="btn-edit-rule btn-make-global" data-rule-id="${rule.id}" title="Make Global">Make Global</button>`
+                    : '';
+
+                html += `
+                <tr class="existing-rule-row" data-rule-id="${rule.id}" data-search-terms="${searchTerms}">
+                    <td class="col-type ${ruleTypeClass}">${ruleTypeText}</td>
+                    <td class="col-ship">${rule.ship_name}</td>
+                    <td class="col-group">${rule.group_name}</td>
+                    <td>${rule.attribute_name}</td>
+                    <td class="col-logic">
+                        <select class="rule-select edit-rule-select" data-rule-id="${rule.id}">
+                            <option value="true" ${rule.higher_is_better ? 'selected' : ''}>Higher is Better</option>
+                            <option value="false" ${!rule.higher_is_better ? 'selected' : ''}>Lower is Better</option>
+                        </select>
+                    </td>
+                    <td class="col-actions">
+                        <div class="rule-actions-container">
+                            <button class="btn-save-rule" data-rule-id="${rule.id}" style="display: none;">Save</button>
+                            ${makeGlobalButton} <!-- NEW: Added button -->
+                            <button class="btn-delete-rule" data-rule-id="${rule.id}">Delete</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+            existingRulesTbody.innerHTML = html;
+            existingRulesEmptyMsg.style.display = data.length === 0 ? 'block' : 'none';
+        }
+
+        // --- Render IGNORED Groups ---
+        function renderIgnoredGroups(data) {
+            let html = '';
+            data.forEach(group => {
+                html += `
+                <tr class="ignored-group-row" data-group-id="${group.id}" data-search-terms="${group.name.toLowerCase()}">
+                    <td class="col-group">${group.name}</td>
+                    <td class="col-actions">
+                        <div class="rule-actions-container">
+                            <button class="btn-unignore-rule" data-group-id="${group.id}">Un-ignore</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+            ignoredGroupsTbody.innerHTML = html;
+            ignoredGroupsEmptyMsg.style.display = data.length === 0 ? 'block' : 'none';
+        }
+
+        // --- Main Data Loading Function ---
+        function loadAllRuleData() {
+            setLoadingState(true);
+            fetch(dataUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        renderGlobalRules(data.global_unruled_data);
+                        renderSpecificRules(data.specific_unruled_data);
+                        renderExistingRules(data.existing_rules_data);
+                        renderIgnoredGroups(data.ignored_groups_data);
+                        // Make sure the correct content is visible
+                        filterContent();
+                    } else {
+                        showMessage('error', `Failed to load rule data: ${data.message}`);
+                    }
+                })
+                .catch(err => {
+                    showMessage('error', `Network Error: ${err.message}`);
+                })
+                .finally(() => {
+                    setLoadingState(false);
+                });
+        }
+
+        // ---
+        // --- 4. EVENT LISTENERS
+        // ---
+
+        // --- Main Click Handler ---
         document.querySelector('.container').addEventListener('click', (e) => {
-            // Check for header click
             const header = e.target.closest('.rule-group-header');
-            if (header) {
-                // Check if we clicked the ignore button
-                if (e.target.closest('.btn-ignore')) {
-                    handleIgnoreClick(e.target.closest('.btn-ignore'));
-                    return; // Don't toggle expando
-                }
-
-                // Toggle expando
-                const card = header.closest('.rule-group-card');
-                if (card) {
-                    card.classList.toggle('is-open');
-                }
-            }
-
-            // Check for checkbox click
             const checkbox = e.target.closest('.rule-checkbox');
-            if (checkbox) {
+            const deleteButton = e.target.closest('.btn-delete-rule');
+            const ignoreButton = e.target.closest('.btn-ignore');
+            const saveRuleButton = e.target.closest('.btn-save-rule');
+            const unignoreButton = e.target.closest('.btn-unignore-rule');
+            // --- NEW: Make Global Button ---
+            const makeGlobalButton = e.target.closest('.btn-make-global');
+
+            if (header && !ignoreButton) {
+                const card = header.closest('.rule-group-card');
+                if (card) card.classList.toggle('is-open');
+            }
+            else if (checkbox) {
                 handleCheckboxClick(checkbox);
+            }
+            else if (deleteButton) {
+                handleDeleteRuleClick(deleteButton);
+            }
+            else if (ignoreButton) {
+                handleIgnoreClick(ignoreButton);
+            }
+            else if (saveRuleButton) {
+                handleEditRuleSaveClick(saveRuleButton);
+            }
+            else if (unignoreButton) {
+                handleUnignoreClick(unignoreButton);
+            }
+            // --- NEW: Handle Make Global ---
+            else if (makeGlobalButton) {
+                handleMakeGlobalClick(makeGlobalButton);
             }
         });
 
-        // ---
-        // --- 4. CHECKBOX / SELECT LOGIC
-        // ---
+        // --- Change handler for edit-rule-select ---
+        document.querySelector('.container').addEventListener('change', (e) => {
+            const select = e.target.closest('.edit-rule-select');
+            if (select) {
+                // Show the 'Save' button for this row
+                const actions = select.closest('tr').querySelector('.rule-actions-container');
+                if (actions) {
+                    actions.querySelector('.btn-save-rule').style.display = 'inline-block';
+                }
+            }
+        });
+
+
         function handleCheckboxClick(checkbox) {
             const select = checkbox.closest('tr').querySelector('.rule-select');
             if (select) {
@@ -624,94 +945,57 @@
             }
         }
 
-        // ---
-        // --- 5. IGNORE GROUP LOGIC
-        // ---
         function handleIgnoreClick(ignoreButton) {
             const card = ignoreButton.closest('.rule-group-card');
             const groupName = card.dataset.groupName;
-            const groupId = card.dataset.groupName; // This is a bug, see below
-
-            // --- THIS IS A BUG, FIXING ---
-            // It should be data-group-id, not data-group-name
-            const finalGroupId = card.dataset.groupId;
-            // --- END FIX ---
+            const groupId = card.dataset.groupId;
 
             showCustomConfirm(
-                `Are you sure you want to ignore the group "<strong>${groupName}</strong>"?<br><br>It will be hidden from this helper page. You can undo this in the Django Admin.`,
+                `Are you sure you want to ignore the group "<strong>${groupName}</strong>"?`,
                 () => {
-                    // On confirm
                     fetch(ignoreUrl, {
                         method: 'POST',
-                        headers: {
-                            'X-CSRFToken': csrfToken,
-                            'Content-Type': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        body: JSON.stringify({ group_id: finalGroupId })
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ group_id: groupId })
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'success') {
                             showMessage('success', data.message);
-                            // Fade out all cards for this group
-                            document.querySelectorAll(`.rule-group-card[data-group-id="${finalGroupId}"]`).forEach(c => {
-                                c.classList.add('is-saved');
-                            });
+                            loadAllRuleData(); // Reload all data
                         } else {
                             showMessage('error', `Error: ${data.message}`);
                         }
                     })
-                    .catch(err => {
-                        showMessage('error', `Network Error: ${err.message}`);
-                    });
+                    .catch(err => showMessage('error', `Network Error: ${err.message}`));
                 }
             );
         }
 
-        // ---
-        // --- 6. SAVE RULES LOGIC
-        // ---
+        // --- Save NEW Rules ---
         saveButton.addEventListener('click', () => {
             let rulesToSave = [];
-            let cardsToFade = [];
             const activeTabId = document.querySelector('.tab-btn.active').dataset.tab;
-
-            // Find all *visible* cards in the *active* tab
             const activeCards = document.querySelectorAll(`#${activeTabId} .rule-group-card:not(.is-hidden)`);
 
             activeCards.forEach(card => {
                 const groupId = card.dataset.groupId;
-                // --- NEW: Check for ship ID ---
-                const shipId = card.dataset.shipId; // Will be undefined for global rules
-                let cardHasNewRules = false;
-
-                const checkedRows = card.querySelectorAll('.rule-checkbox:checked');
-
-                checkedRows.forEach(box => {
+                const shipId = card.dataset.shipId;
+                card.querySelectorAll('.rule-checkbox:checked').forEach(box => {
                     const row = box.closest('tr');
                     const attrId = row.dataset.attrId;
                     const select = row.querySelector('.rule-select');
                     const higherIsBetter = select.value === 'true';
-
                     let rule = {
                         group_id: groupId,
                         attr_id: attrId,
                         higher_is_better: higherIsBetter
                     };
-
-                    // --- NEW: Add ship_type_id if it exists ---
                     if (shipId) {
                         rule.ship_type_id = shipId;
                     }
-
                     rulesToSave.push(rule);
-                    cardHasNewRules = true;
                 });
-
-                if (cardHasNewRules) {
-                    cardsToFade.push(card);
-                }
             });
 
             if (rulesToSave.length === 0) {
@@ -725,33 +1009,177 @@
 
             fetch(saveUrl, {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ rules: rulesToSave })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     showMessage('success', data.message);
-                    // Fade out the cards we just saved
-                    cardsToFade.forEach(card => {
-                        card.classList.add('is-saved');
-                    });
+                    loadAllRuleData(); // Reload all data
                 } else {
                     showMessage('error', `Error: ${data.message}`);
                 }
             })
-            .catch(err => {
-                showMessage('error', `Network Error: ${err.message}`);
-            })
+            .catch(err => showMessage('error', `Network Error: ${err.message}`))
             .finally(() => {
                 saveButton.disabled = false;
                 saveButton.textContent = 'Save Selected Rules';
             });
         });
+
+        // --- Save EDITED Rule ---
+        function handleEditRuleSaveClick(saveRuleButton) {
+            const ruleId = saveRuleButton.dataset.ruleId;
+            const row = saveRuleButton.closest('tr');
+            const select = row.querySelector('.edit-rule-select');
+            if (!ruleId || !row || !select) return;
+
+            const higherIsBetter = select.value === 'true';
+
+            saveRuleButton.disabled = true;
+            saveRuleButton.textContent = '...';
+
+            fetch(editUrl, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                // --- MODIFIED: Send correct payload ---
+                body: JSON.stringify({ rule_id: ruleId, higher_is_better: higherIsBetter })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showMessage('success', data.message);
+                    saveRuleButton.style.display = 'none'; // Hide save button
+                } else {
+                    showMessage('error', `Error: ${data.message}`);
+                }
+            })
+            .catch(err => showMessage('error', `Network Error: ${err.message}`))
+            .finally(() => {
+                saveRuleButton.disabled = false;
+                saveRuleButton.textContent = 'Save';
+            });
+        }
+
+        // --- DELETE Rule ---
+        function handleDeleteRuleClick(deleteButton) {
+            const ruleId = deleteButton.dataset.ruleId;
+            const row = deleteButton.closest('tr');
+            const groupName = row.cells[2].textContent.trim();
+            const attrName = row.cells[3].textContent.trim();
+
+            showCustomConfirm(
+                `Are you sure you want to delete the rule for:<br><br><strong>${groupName} &gt; ${attrName}</strong>?`,
+                () => {
+                    deleteButton.disabled = true;
+                    fetch(deleteUrl, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ rule_id: ruleId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showMessage('success', data.message);
+                            loadAllRuleData(); // Reload all data
+                        } else {
+                            showMessage('error', `Error: ${data.message}`);
+                            deleteButton.disabled = false;
+                        }
+                    })
+                    .catch(err => {
+                        showMessage('error', `Network Error: ${err.message}`);
+                        deleteButton.disabled = false;
+                    });
+                }
+            );
+        }
+
+        // --- NEW: Make Global Rule ---
+        function handleMakeGlobalClick(makeGlobalButton) {
+            const ruleId = makeGlobalButton.dataset.ruleId;
+            const row = makeGlobalButton.closest('tr');
+            if (!ruleId || !row) return;
+
+            const groupName = row.cells[2].textContent.trim();
+            const attrName = row.cells[3].textContent.trim();
+
+            showCustomConfirm(
+                `Are you sure you want to make this rule GLOBAL?<br><br>
+                 <strong>${groupName} &gt; ${attrName}</strong><br><br>
+                 This will make it apply to all ships. This will fail if a global rule for this item already exists.`,
+                () => {
+                    // On confirm
+                    makeGlobalButton.disabled = true;
+                    makeGlobalButton.textContent = '...';
+
+                    fetch(editUrl, { // Use the same editUrl
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({
+                            rule_id: ruleId,
+                            ship_type_id: null // Send ship_type_id as null
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showMessage('success', "Rule successfully made global.");
+                            loadAllRuleData(); // Reload all data
+                        } else {
+                            showMessage('error', `Error: ${data.message}`);
+                            makeGlobalButton.disabled = false;
+                            makeGlobalButton.textContent = 'Make Global';
+                        }
+                    })
+                    .catch(err => {
+                        showMessage('error', `Network Error: ${err.message}`);
+                        makeGlobalButton.disabled = false;
+                        makeGlobalButton.textContent = 'Make Global';
+                    });
+                }
+            );
+        }
+        // --- END NEW ---
+
+        // --- UN-IGNORE Group ---
+        function handleUnignoreClick(unignoreButton) {
+            const groupId = unignoreButton.dataset.groupId;
+            const row = unignoreButton.closest('tr');
+            const groupName = row.cells[0].textContent.trim();
+
+            showCustomConfirm(
+                `Are you sure you want to un-ignore the group "<strong>${groupName}</strong>"?<br><br>It will re-appear in the Global/Specific rules tabs.`,
+                () => {
+                    unignoreButton.disabled = true;
+                    fetch(unignoreUrl, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ group_id: groupId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showMessage('success', data.message);
+                            loadAllRuleData(); // Reload all data
+                        } else {
+                            showMessage('error', `Error: ${data.message}`);
+                            unignoreButton.disabled = false;
+                        }
+                    })
+                    .catch(err => {
+                        showMessage('error', `Network Error: ${err.message}`);
+                        unignoreButton.disabled = false;
+                    });
+                }
+            );
+        }
+
+        // ---
+        // --- 5. INITIAL LOAD
+        // ---
+        loadAllRuleData();
 
     });
 </script>

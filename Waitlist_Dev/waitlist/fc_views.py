@@ -1345,188 +1345,235 @@ def api_fc_delete_wing(request):
 
 
 # ---
-# --- NEW: RULE HELPER VIEWS
+# --- RULE HELPER VIEWS
 # ---
+
 @login_required
 @user_passes_test(is_fleet_commander)
 def fc_rule_helper_view(request):
     """
-    Displays a page to help FCs create ItemComparisonRules.
-    It scans all Doctrines, finds un-ruled groups, and shows
-    all available attributes for them.
-    
-    --- MODIFIED: Now supports two tabs ---
-    1. Global Rules: For item groups
-    2. Specific Rules: For (ship, item group) combinations
+    Displays the EMPTY shell for the rule helper.
+    All data is now loaded dynamically via API.
     """
-    logger.debug(f"FC {request.user.username} accessing rule helper")
-    
-    # ---
-    # --- 1. DATA FOR "GLOBAL RULES" TAB
-    # ---
-    
-    # 1a. Get all item groups that are in *any* doctrine fit
-    all_doctrine_fits = DoctrineFit.objects.filter(fit_items_json__isnull=False)
-    all_item_ids_in_doctrines = set()
-    for fit in all_doctrine_fits:
-        all_item_ids_in_doctrines.update(int(k) for k in fit.get_fit_items().keys())
-    
-    # 1b. Get all groups for these items, excluding ignored ones
-    doctrine_groups = EveGroup.objects.filter(
-        types__type_id__in=all_item_ids_in_doctrines,
-        ignore_for_rules=False # <-- NEW: Respect the ignore flag
-    ).distinct()
-    
-    # 1c. Get all groups that *already* have global rules
-    ruled_group_ids = ItemComparisonRule.objects.filter(
-        ship_type__isnull=True # Global rules only
-    ).values_list('group_id', flat=True).distinct()
-    
-    # 1d. Filter to find *un-ruled* groups
-    unruled_groups = doctrine_groups.exclude(group_id__in=ruled_group_ids)
-    
-    # 1e. Get all attributes for all items in these un-ruled groups
-    # This is a big query, but it's efficient.
-    attributes_for_groups = EveDogmaAttribute.objects.filter(
-        type_values__type__group__in=unruled_groups
-    ).distinct().order_by('name')
-    
-    # 1f. Build the context for "Global Rules"
-    global_unruled_data = []
-    for group in unruled_groups:
-        group_data = {
-            "group_id": group.group_id,
-            "group_name": group.name,
-            "attributes": []
-        }
-        
-        # Find all attributes that apply to this group
-        group_attrs = attributes_for_groups.filter(
-            type_values__type__group=group
-        ).distinct()
-        
-        for attr in group_attrs:
-            group_data["attributes"].append({
-                "attr_id": attr.attribute_id,
-                "attr_name": attr.name,
-                "unit_name": attr.unit_name,
-                "description": attr.description
-            })
-        
-        if group_data["attributes"]: # Only add if we found attributes
-            global_unruled_data.append(group_data)
+    logger.debug(f"FC {request.user.username} accessing rule helper shell")
 
-    logger.debug(f"Found {len(global_unruled_data)} un-ruled GLOBAL groups")
-    
-    # ---
-    # --- 2. DATA FOR "SPECIFIC RULES" TAB
-    # ---
-    
-    # 2a. Get all (ship_id, group_id) pairs that are in doctrines
-    ship_group_pairs_in_doctrines = set()
-    for fit in all_doctrine_fits:
-        ship_id = fit.ship_type_id
-        if not ship_id:
-            continue
-        
-        item_ids = [int(k) for k in fit.get_fit_items().keys()]
-        
-        # Find all groups for these items
-        groups_for_items = EveType.objects.filter(
-            type_id__in=item_ids,
-            group__ignore_for_rules=False # <-- NEW: Respect ignore flag
-        ).values_list('group_id', flat=True).distinct()
-        
-        for group_id in groups_for_items:
-            ship_group_pairs_in_doctrines.add((ship_id, group_id))
-
-    # 2b. Get all (ship_id, group_id) pairs that *already* have specific rules
-    ruled_ship_group_pairs = ItemComparisonRule.objects.filter(
-        ship_type__isnull=False
-    ).values_list('ship_type_id', 'group_id').distinct()
-    
-    # 2c. Find un-ruled pairs
-    unruled_ship_group_pairs = ship_group_pairs_in_doctrines - set(ruled_ship_group_pairs)
-    
-    # 2d. Get all attributes for these un-ruled pairs
-    # This is complex. We need to find all attributes for all items
-    # in each un-ruled group. We'll fetch them all.
-    all_unruled_specific_group_ids = {group_id for ship_id, group_id in unruled_ship_group_pairs}
-    
-    attributes_for_specific_groups = EveDogmaAttribute.objects.filter(
-        type_values__type__group_id__in=all_unruled_specific_group_ids
-    ).distinct().order_by('name')
-
-    # 2e. Build the context for "Specific Rules"
-    # We need to group by ship, then by group
-    
-    # { ship_id: { "ship_name": "...", "groups": [ ... ] } }
-    specific_unruled_data_map = {}
-    
-    # Get all relevant ship and group names
-    all_relevant_ship_ids = {ship_id for ship_id, group_id in unruled_ship_group_pairs}
-    all_relevant_group_ids = all_unruled_specific_group_ids
-    
-    ship_names = {s.type_id: s.name for s in EveType.objects.filter(type_id__in=all_relevant_ship_ids)}
-    group_names = {g.group_id: g.name for g in EveGroup.objects.filter(group_id__in=all_relevant_group_ids)}
-    
-    for ship_id, group_id in unruled_ship_group_pairs:
-        if ship_id not in specific_unruled_data_map:
-            specific_unruled_data_map[ship_id] = {
-                "ship_id": ship_id,
-                "ship_name": ship_names.get(ship_id, f"Unknown Ship {ship_id}"),
-                "groups": []
-            }
-        
-        group_data = {
-            "group_id": group_id,
-            "group_name": group_names.get(group_id, f"Unknown Group {group_id}"),
-            "attributes": []
-        }
-        
-        # Find all attributes that apply to this group
-        group_attrs = attributes_for_specific_groups.filter(
-            type_values__type__group_id=group_id
-        ).distinct()
-        
-        for attr in group_attrs:
-            group_data["attributes"].append({
-                "attr_id": attr.attribute_id,
-                "attr_name": attr.name,
-                "unit_name": attr.unit_name,
-                "description": attr.description
-            })
-            
-        if group_data["attributes"]:
-            specific_unruled_data_map[ship_id]["groups"].append(group_data)
-
-    # Convert map to sorted list
-    specific_unruled_data = sorted(
-        [data for data in specific_unruled_data_map.values() if data["groups"]],
-        key=lambda x: x["ship_name"]
-    )
-    for ship_data in specific_unruled_data:
-        ship_data["groups"].sort(key=lambda x: x["group_name"])
-        
-    logger.debug(f"Found {len(unruled_ship_group_pairs)} un-ruled SHIP-SPECIFIC group pairs")
-
-    # --- 3. Context for base.html ---
+    # --- Context for base.html ---
     all_user_chars = request.user.eve_characters.all().order_by('character_name')
     main_char = all_user_chars.filter(is_main=True).first()
     if not main_char:
         main_char = all_user_chars.first()
 
     context = {
-        'global_unruled_data': global_unruled_data,
-        'specific_unruled_data': specific_unruled_data,
-        
         'is_fc': True,
         'user_characters': all_user_chars,
         'all_chars_for_header': all_user_chars,
         'main_char_for_header': main_char,
     }
     
+    # Just render the template shell
     return render(request, 'fc_rule_helper.html', context)
+
+
+@login_required
+@user_passes_test(is_fleet_commander)
+def api_fc_get_rule_helper_data(request):
+    """
+    API endpoint that fetches ALL data required to populate
+    the rule helper page.
+    --- OPTIMIZED to remove N+1 queries ---
+    """
+    try:
+        logger.debug(f"FC {request.user.username} fetching all rule helper data")
+        
+        # ---
+        # --- PRE-FETCHING (Optimized)
+        # ---
+        
+        # 1. Get all item types from all doctrines in one go
+        all_doctrine_fits = DoctrineFit.objects.filter(fit_items_json__isnull=False)
+        all_item_ids_in_doctrines = set()
+        for fit in all_doctrine_fits:
+            all_item_ids_in_doctrines.update(int(k) for k in fit.get_fit_items().keys())
+
+        # 2. Get all EveType objects for these items, ignoring globally-ignored groups
+        all_doctrine_types_qs = EveType.objects.filter(
+            type_id__in=all_item_ids_in_doctrines,
+            group__ignore_for_rules=False
+        ).select_related('group')
+        
+        doctrine_type_map = {t.type_id: t for t in all_doctrine_types_qs}
+        
+        # 3. Get all *unique group IDs* from our valid doctrine items
+        all_doctrine_group_ids = {t.group_id for t in doctrine_type_map.values()}
+        
+        # 4. Get all dogma attributes for *all* items in these groups, in one query
+        # This is the biggest optimization.
+        attrs_by_group_id = {}
+        attr_data_qs = EveDogmaAttribute.objects.filter(
+            type_values__type__group_id__in=all_doctrine_group_ids
+        ).values(
+            'attribute_id', 
+            'name', 
+            'unit_name', 
+            'description', 
+            'type_values__type__group_id' # This is the key: gets the group_id
+        ).distinct()
+
+        for attr in attr_data_qs:
+            group_id = attr['type_values__type__group_id']
+            if group_id not in attrs_by_group_id:
+                attrs_by_group_id[group_id] = {}
+            
+            # Use attribute_id as key to de-duplicate attributes
+            attrs_by_group_id[group_id][attr['attribute_id']] = {
+                "attr_id": attr['attribute_id'],
+                "attr_name": attr['name'],
+                "unit_name": attr['unit_name'],
+                "description": attr['description']
+            }
+
+        # ---
+        # --- 1. DATA FOR "GLOBAL RULES" TAB (Optimized)
+        # ---
+        
+        # 1a. Get all group IDs that *already* have global rules
+        ruled_group_ids = ItemComparisonRule.objects.filter(
+            ship_type__isnull=True
+        ).values_list('group_id', flat=True).distinct()
+        
+        # 1b. Find un-ruled groups by subtracting the two sets
+        unruled_group_ids = all_doctrine_group_ids - set(ruled_group_ids)
+        
+        # 1c. Get names for our unruled groups
+        group_names_map = {
+            g.group_id: g.name 
+            for g in EveGroup.objects.filter(group_id__in=unruled_group_ids)
+        }
+
+        # 1d. Build the data from our pre-fetched attribute dict
+        global_unruled_data = []
+        for group_id in unruled_group_ids:
+            attributes_list = list(attrs_by_group_id.get(group_id, {}).values())
+            if attributes_list: # Only add if we found attributes
+                global_unruled_data.append({
+                    "group_id": group_id,
+                    "group_name": group_names_map.get(group_id, f"Group {group_id}"),
+                    "attributes": attributes_list
+                })
+
+        # ---
+        # --- 2. DATA FOR "SPECIFIC RULES" TAB (Optimized)
+        # ---
+        
+        # 2a. Get all (ship_id, group_id) pairs from doctrines (all in memory)
+        ship_group_pairs_in_doctrines = set()
+        all_relevant_ship_ids = set()
+        for fit in all_doctrine_fits:
+            ship_id = fit.ship_type_id
+            if not ship_id:
+                continue
+            all_relevant_ship_ids.add(ship_id)
+            for item_id_str in fit.get_fit_items().keys():
+                item_type = doctrine_type_map.get(int(item_id_str))
+                if item_type:
+                    ship_group_pairs_in_doctrines.add((ship_id, item_type.group_id))
+
+        # 2b. Get all pairs that *already* have specific rules
+        ruled_ship_group_pairs = set(
+            ItemComparisonRule.objects.filter(
+                ship_type__isnull=False
+            ).values_list('ship_type_id', 'group_id').distinct()
+        )
+        
+        # 2c. Find un-ruled pairs by subtracting
+        unruled_ship_group_pairs = ship_group_pairs_in_doctrines - ruled_ship_group_pairs
+        
+        # 2d. Get names for all relevant ships and groups
+        ship_names_map = {
+            s.type_id: s.name 
+            for s in EveType.objects.filter(type_id__in=all_relevant_ship_ids)
+        }
+        
+        all_specific_group_ids = {group_id for _, group_id in unruled_ship_group_pairs}
+        # Update our group_names_map with any new groups
+        new_group_ids = all_specific_group_ids - set(group_names_map.keys())
+        if new_group_ids:
+            group_names_map.update({
+                g.group_id: g.name 
+                for g in EveGroup.objects.filter(group_id__in=new_group_ids)
+            })
+        
+        # 2e. Build the data from our pre-fetched attribute dict
+        specific_unruled_data_map = {}
+        for ship_id, group_id in unruled_ship_group_pairs:
+            attributes_list = list(attrs_by_group_id.get(group_id, {}).values())
+            
+            if attributes_list: # Only add if attributes exist
+                if ship_id not in specific_unruled_data_map:
+                    specific_unruled_data_map[ship_id] = {
+                        "ship_id": ship_id,
+                        "ship_name": ship_names_map.get(ship_id, f"Ship {ship_id}"),
+                        "groups": []
+                    }
+                
+                specific_unruled_data_map[ship_id]["groups"].append({
+                    "group_id": group_id,
+                    "group_name": group_names_map.get(group_id, f"Group {group_id}"),
+                    "attributes": attributes_list
+                })
+
+        # 2f. Convert map to sorted list
+        specific_unruled_data = sorted(
+            [data for data in specific_unruled_data_map.values() if data["groups"]],
+            key=lambda x: x["ship_name"]
+        )
+        for ship_data in specific_unruled_data:
+            ship_data["groups"].sort(key=lambda x: x["group_name"])
+            
+        # ---
+        # --- 3. DATA FOR "EDIT EXISTING RULES" TAB (Already efficient)
+        # ---
+        existing_rules_qs = ItemComparisonRule.objects.all().select_related(
+            'group', 'attribute', 'ship_type'
+        ).order_by('ship_type__name', 'group__name', 'attribute__name')
+        
+        existing_rules_data = [
+            {
+                "id": rule.id,
+                "is_specific": rule.ship_type is not None,
+                "ship_name": rule.ship_type.name if rule.ship_type else "-",
+                "group_name": rule.group.name,
+                "attribute_name": rule.attribute.name,
+                "higher_is_better": rule.higher_is_better,
+            }
+            for rule in existing_rules_qs
+        ]
+        
+        # ---
+        # --- 4. DATA FOR "MANAGE IGNORED GROUPS" TAB (Already efficient)
+        # ---
+        ignored_groups_qs = EveGroup.objects.filter(ignore_for_rules=True).order_by('name')
+        ignored_groups_data = [
+            {
+                "id": group.group_id,
+                "name": group.name,
+            }
+            for group in ignored_groups_qs
+        ]
+        
+        # --- 5. Return all data ---
+        logger.debug(f"Rule helper data fully assembled. Global: {len(global_unruled_data)}, Specific: {len(specific_unruled_data)}, Existing: {len(existing_rules_data)}, Ignored: {len(ignored_groups_data)}")
+        return JsonResponse({
+            "status": "success",
+            "global_unruled_data": global_unruled_data,
+            "specific_unruled_data": specific_unruled_data,
+            "existing_rules_data": existing_rules_data,
+            "ignored_groups_data": ignored_groups_data,
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching rule helper data: {e}", exc_info=True)
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
 
 
 @login_required
@@ -1628,6 +1675,155 @@ def api_fc_ignore_rule_group(request):
     except Exception as e:
         logger.error(f"Error ignoring group: {e}", exc_info=True)
         return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
+
+
+@login_required
+@require_POST
+@user_passes_test(is_fleet_commander)
+def api_fc_delete_comparison_rule(request):
+    """
+    API endpoint to delete an existing ItemComparisonRule.
+    """
+    try:
+        data = json.loads(request.body)
+        rule_id = data.get('rule_id')
+        logger.info(f"FC {request.user.username} deleting rule {rule_id}")
+        
+        if not rule_id:
+            logger.warning(f"api_fc_delete_comparison_rule: Missing rule_id")
+            return JsonResponse({"status": "error", "message": "Missing rule_id."}, status=400)
+            
+        rule = get_object_or_404(ItemComparisonRule, id=rule_id)
+        rule_name = str(rule) # Get a string representation before deleting
+        rule.delete()
+        
+        logger.info(f"Rule {rule_id} ({rule_name}) deleted.")
+        return JsonResponse({"status": "success", "message": f"Rule '{rule_name}' deleted."})
+
+    except ItemComparisonRule.DoesNotExist:
+        logger.warning(f"api_fc_delete_comparison_rule: Rule {rule_id} not found.")
+        return JsonResponse({"status": "error", "message": "Rule not found."}, status=404)
+    except json.JSONDecodeError:
+        logger.warning(f"api_fc_delete_comparison_rule: Invalid JSON from {request.user.username}")
+        return JsonResponse({"status": "error", "message": "Invalid request data."}, status=400)
+    except Exception as e:
+        logger.error(f"Error deleting rule: {e}", exc_info=True)
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
+
 # ---
-# --- END NEW RULE HELPER VIEWS
+# --- NEW: EDIT AND UN-IGNORE APIs
 # ---
+
+@login_required
+@require_POST
+@user_passes_test(is_fleet_commander)
+def api_fc_edit_comparison_rule(request):
+    """
+    API endpoint to edit an existing ItemComparisonRule.
+    Can edit 'higher_is_better' or change 'ship_type'.
+    """
+    try:
+        data = json.loads(request.body)
+        rule_id = data.get('rule_id')
+        
+        if not rule_id:
+            logger.warning(f"api_fc_edit_comparison_rule: Missing rule_id")
+            return JsonResponse({"status": "error", "message": "Missing rule_id."}, status=400)
+            
+        rule = get_object_or_404(ItemComparisonRule, id=rule_id)
+        
+        # --- NEW: Flexible update logic ---
+        updated_fields = []
+        
+        # Check if 'higher_is_better' is in the payload
+        if 'higher_is_better' in data:
+            higher_is_better = data.get('higher_is_better')
+            if higher_is_better is None:
+                return JsonResponse({"status": "error", "message": "Invalid 'higher_is_better' value."}, status=400)
+                
+            rule.higher_is_better = bool(higher_is_better)
+            updated_fields.append("logic")
+            logger.info(f"FC {request.user.username} editing rule {rule_id}: set higher_is_better={rule.higher_is_better}")
+
+        # Check if 'ship_type_id' is in the payload (e.g., set to null)
+        if 'ship_type_id' in data:
+            ship_type_id = data.get('ship_type_id')
+            
+            if ship_type_id is None:
+                # User wants to make this rule GLOBAL
+                logger.info(f"FC {request.user.username} editing rule {rule_id}: setting to GLOBAL")
+                
+                # Check for conflicts
+                conflict_exists = ItemComparisonRule.objects.filter(
+                    group=rule.group,
+                    attribute=rule.attribute,
+                    ship_type__isnull=True
+                ).exclude(id=rule.id).exists()
+                
+                if conflict_exists:
+                    logger.warning(f"FC {request.user.username} edit rule {rule_id} failed: Global rule already exists for {rule.group.name}/{rule.attribute.name}")
+                    return JsonResponse({
+                        "status": "error", 
+                        "message": f"A global rule for '{rule.group.name}' and '{rule.attribute.name}' already exists. Cannot make this a global rule."
+                    }, status=400)
+                
+                rule.ship_type = None
+                updated_fields.append("scope")
+            else:
+                # Logic to change to a *different* ship would go here,
+                # but we only support "make global" for now.
+                logger.warning(f"api_fc_edit_comparison_rule: Received unhandled ship_type_id: {ship_type_id}")
+                pass
+
+        if not updated_fields:
+            return JsonResponse({"status": "error", "message": "No valid edit data provided."}, status=400)
+
+        rule.save()
+        
+        logger.info(f"Rule {rule_id} updated successfully (fields: {', '.join(updated_fields)}).")
+        return JsonResponse({"status": "success", "message": "Rule updated."})
+        # --- END NEW ---
+
+    except ItemComparisonRule.DoesNotExist:
+        logger.warning(f"api_fc_edit_comparison_rule: Rule {rule_id} not found.")
+        return JsonResponse({"status": "error", "message": "Rule not found."}, status=404)
+    except json.JSONDecodeError:
+        logger.warning(f"api_fc_edit_comparison_rule: Invalid JSON from {request.user.username}")
+        return JsonResponse({"status": "error", "message": "Invalid request data."}, status=400)
+    except Exception as e:
+        logger.error(f"Error editing rule: {e}", exc_info=True)
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
+
+
+@login_required
+@require_POST
+@user_passes_test(is_fleet_commander)
+def api_fc_unignore_rule_group(request):
+    """
+    API endpoint to set the 'ignore_for_rules' flag to False on an EveGroup.
+    """
+    try:
+        data = json.loads(request.body)
+        group_id = data.get('group_id')
+        logger.info(f"FC {request.user.username} un-ignoring group {group_id}")
+        
+        if not group_id:
+            logger.warning(f"api_fc_unignore_rule_group: Missing group_id")
+            return JsonResponse({"status": "error", "message": "Missing group_id."}, status=400)
+            
+        group = get_object_or_404(EveGroup, group_id=group_id)
+        group.ignore_for_rules = False
+        group.save()
+        
+        logger.info(f"Group {group.name} (ID: {group_id}) set to be un-ignored.")
+        return JsonResponse({"status": "success", "message": f"Group '{group.name}' will now appear in the helper."})
+
+    except EveGroup.DoesNotExist:
+        logger.warning(f"api_fc_unignore_rule_group: Group {group_id} not found.")
+        return JsonResponse({"status": "error", "message": "Group not found."}, status=404)
+    except json.JSONDecodeError:
+        logger.warning(f"api_fc_unignore_rule_group: Invalid JSON from {request.user.username}")
+        return JsonResponse({"status": "error", "message": "Invalid request data."}, status=400)
+    except Exception as e:
+        logger.error(f"Error un-ignoring group: {e}", exc_info=True)
+        return JsonResponse({"status": "error", "message": f"An error occurred: {str(e)}"}, status=500)
