@@ -21,20 +21,104 @@ so they can be correctly injected into the base.html <head>.
 
     @media (min-width: 1200px) {
         .container {
-            max-width: 1400px;
+            /* Widen container to fit the new grid */
+            max-width: 1600px;
         }
     }
 
-    /* --- MODIFIED: Header is now a flex container --- */
-    .header {
-        display: flex;
-        flex-wrap: wrap; /* Allow stacking on mobile */
-        justify-content: space-between;
-        align-items: flex-start; /* Align tops of items */
+    /* ---
+    --- NEW 3-CARD HEADER LAYOUT
+    --- */
+    .pilot-header-card {
+        display: grid;
+        /* Define 3 columns. Pilot info gets more space. */
+        /* MODIFIED: Gave implants (col 2) more space, reduced alts (col 3) */
+        grid-template-columns: 2fr 1.6fr 1.4fr;
         gap: 20px;
         border-bottom: 0px solid #444;
-        padding-bottom: 20px;
+        /* MODIFIED: Reduced bottom padding */
+        padding-bottom: 10px;
     }
+
+    .header-card-item {
+        background: #333; /* Darker card background */
+        border-radius: 8px;
+        padding: 15px;
+        /* Ensure cards have a consistent top alignment */
+        /* align-self: start;  <-- REMOVED to allow cards to stretch */
+        position: relative; /* NEW: For card-level overlay */
+    }
+
+    /* Style for the pilot info card */
+    .header-info.header-card-item {
+        /* header-info is already flex, this is good */
+        background: #333; /* Ensure it has the card bg */
+        height: 375px;
+    }
+
+    /* Style for the implant card */
+    #implants-section {
+        margin-top: 0; /* Remove old .section margin */
+        height: 375px;
+    }
+
+        #implants-section h2 {
+            margin-top: 0; /* Remove header margin inside card */
+            font-size: 1.5em;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+            margin-bottom: 15px;
+            /* Match flex layout of other card headers */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+    /* Style for the alt card */
+    .header-alts.header-card-item {
+        margin-top: 0;
+        /* NEW: Make card flex-column to enable list scrolling */
+        display: flex;
+        flex-direction: column;
+        /* Set a height for the card itself to contain the list */
+        /* height: 450px; <-- REMOVED to allow card to grow */
+        min-height: 0; /* NEW: Added to prevent flex overflow */
+        height: 375px;
+    }
+
+        /* --- MODIFIED: Added .skills-section.header-card-item h2 --- */
+        .header-alts.header-card-item h2,
+        .skills-section.header-card-item h2 {
+            /* Ensure alt header doesn't shrink */
+            flex-shrink: 0;
+            /* Consolidated styles from .header-alts h2 */
+            margin-top: 0;
+            font-size: 1.5em; /* Set font size */
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+            margin-bottom: 10px;
+        }
+
+    /* Responsive stacking for the new header */
+    @media (max-width: 1200px) {
+        .pilot-header-card {
+            /* Stack to 1 column */
+            grid-template-columns: 1fr;
+        }
+
+        .header-alts.header-card-item {
+            /* Remove fixed height when stacked */
+            height: auto;
+            max-height: 400px; /* But set a max-height */
+        }
+    }
+    /* ---
+    --- END NEW 3-CARD HEADER
+    --- */
+
+
+    /* --- MODIFIED: Header is now a flex container --- */
+    /* .header is no longer used, .pilot-header-card is */
 
     .header-info {
         display: flex;
@@ -109,6 +193,11 @@ so they can be correctly injected into the base.html <head>.
         }
     /* --- END MODIFICATION --- */
 
+    /* --- NEW: Skills section needs to be a container --- */
+    .skills-section {
+        position: relative;
+    }
+
     /* --- NEW: Refresh Button Style --- */
     .btn-refresh {
         background: #555;
@@ -135,8 +224,10 @@ so they can be correctly injected into the base.html <head>.
     #btn-refresh-public {
         position: absolute;
         font-size: 1.0em;
-        top: 0;
-        right: 0;
+        /* --- MODIFIED: Changed from 0 to 15px to match padding --- */
+        top: 15px;
+        right: 15px;
+        /* --- END MODIFICATION --- */
     }
     /* --- END NEW --- */
 
@@ -179,7 +270,7 @@ so they can be correctly injected into the base.html <head>.
         gap: 6px;
         padding: 2px 4px;
         /* --- END MODIFICATION --- */
-        background: #333;
+        background: #3a3a3a; /* Darker than card body */
         border-radius: 5px;
     }
 
@@ -290,7 +381,7 @@ so they can be correctly injected into the base.html <head>.
             border-color: #c94444;
         }
 
-    /* --- LOADING OVERLAY STYLES --- */
+    /* --- GLOBAL LOADING OVERLAY STYLES --- */
     #loading-overlay {
         position: fixed;
         top: 0;
@@ -331,6 +422,40 @@ so they can be correctly injected into the base.html <head>.
         }
     }
 
+    /* --- NEW: Card-level loading overlay --- */
+    .card-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(51, 51, 51, 0.85); /* Darker, from card bg */
+        display: none; /* Hidden by default */
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10; /* Above card content, below global overlay */
+        border-radius: 8px; /* Match parent card */
+        backdrop-filter: blur(2px);
+    }
+
+        .card-loading-overlay.show {
+            display: flex;
+        }
+
+        .card-loading-overlay .spinner {
+            width: 40px; /* Smaller spinner */
+            height: 40px;
+            border-width: 4px;
+        }
+
+        .card-loading-overlay p {
+            color: #fff;
+            font-size: 1em; /* Smaller text */
+            margin-top: 15px;
+        }
+    /* --- END NEW --- */
+
     /* --- NEW: Alt Management Card Styles --- */
     .header-alts {
         flex-grow: 1; /* Allow to grow */
@@ -342,13 +467,7 @@ so they can be correctly injected into the base.html <head>.
         margin-top: 0; /* Override .section margin */
     }
 
-        .header-alts h2 {
-            margin-top: 0;
-            font-size: 1.5em; /* Smaller title */
-            padding-bottom: 10px;
-            border-bottom: 1px solid #444;
-            margin-bottom: 10px;
-        }
+    /* REMOVED .header-alts h2 block, styles moved to .header-alts.header-card-item h2 */
 
     .alt-list {
         list-style: none;
@@ -357,6 +476,11 @@ so they can be correctly injected into the base.html <head>.
         display: flex;
         flex-direction: column;
         gap: 8px;
+        /* NEW: Make the list scrollable */
+        overflow-y: auto;
+        flex-grow: 1;
+        /* Add some padding for the scrollbar */
+        padding-right: 5px;
     }
 
     .alt-item {
@@ -431,10 +555,22 @@ so they can be correctly injected into the base.html <head>.
 </div>
 
 <div class="container">
-    <div class="header">
+    <!--
+    ---
+    --- MODIFIED: This is the new 3-card header
+    ---
+    -->
+    <div class="pilot-header-card">
 
-        <!-- --- MODIFIED: Left Side Info --- -->
-        <div class="header-info">
+        <!-- --- CARD 1: PILOT INFO --- -->
+        <div class="header-info header-card-item">
+            <!-- --- NEW: Card-level overlay --- -->
+            <div class="card-loading-overlay">
+                <div class="spinner"></div>
+                <p>Refreshing...</p>
+            </div>
+            <!-- --- END NEW --- -->
+
             <img src="{{ portrait_url }}" alt="{{ character.character_name }} portrait" width="128" height="128">
             <div>
                 <h1>{{ character.character_name }}</h1>
@@ -442,7 +578,7 @@ so they can be correctly injected into the base.html <head>.
                     <strong>Total SP:</strong> {{ total_sp|intcomma }}<br>
                     <small>Snapshot as of: {{ snapshot_time }}</small>
                 </p>
-                <!-- --- NEW: Corp/Alliance Info --- -->
+                <!-- --- Corp/Alliance Info --- -->
                 <div class="corp-info">
                     {% if character.corporation_id %}
                     <p style="margin: 5px 0;">
@@ -459,103 +595,142 @@ so they can be correctly injected into the base.html <head>.
                 </div>
                 <!-- --- END NEW --- -->
             </div>
-            <!-- --- NEW: Public Data Refresh Button --- -->
+            <!-- --- Public Data Refresh Button --- -->
             <button class="btn-refresh" id="btn-refresh-public" data-section="public" title="Refresh Corp/Alliance Info">&#8635;</button>
-            <!-- --- END NEW --- -->
         </div>
-        <!-- --- END MODIFICATION --- -->
-        <!-- --- NEW: ALT MANAGEMENT CARD (MOVED) --- -->
-        <div class="header-alts section">
+        <!-- --- END CARD 1 --- -->
+        <!--
+    ---
+    --- CARD 2: IMPLANTS (MOVED FROM BELOW)
+    ---
+    -->
+        <div class="section header-card-item" id="implants-section">
+            <!-- --- NEW: Card-level overlay --- -->
+            <div class="card-loading-overlay">
+                <div class="spinner"></div>
+                <p>Refreshing...</p>
+            </div>
+            <!-- --- END NEW --- -->
+
+            <h2>
+                Implants
+                <button class="btn-refresh" data-section="implants" title="Refresh Implants">&#8635;</button>
+            </h2>
+
+            <ul class="implant-other-list">
+                {% for implant in implants_other %}
+                <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
+                    <img src="{{ implant.icon_url }}"
+                         alt="{{ implant.name }}">
+                    <div class="implant-info">
+                        {% if implant.slot > 0 %}
+                        <span class="implant-slot">
+                            Slot {{ implant.slot }}
+                        </span>
+                        {% endif %}
+                        <span class="implant-name">{{ implant.name }}</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+
+            <div class="implant-grid-container">
+                <ul class="implant-column-list">
+                    {% for implant in implants_col1 %}
+                    <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
+                        <img src="{{ implant.icon_url }}"
+                             alt="{{ implant.name }}">
+                        <div class="implant-info">
+                            <span class="implant-slot">Slot {{ implant.slot }}</span>
+                            <span class="implant-name">{{ implant.name }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <ul class="implant-column-list">
+                    {% for implant in implants_col2 %}
+                    <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
+                        <img src="{{ implant.icon_url }}"
+                             alt="{{ implant.name }}">
+                        <div class="implant-info">
+                            <span class="implant-slot">Slot {{ implant.slot }}</span>
+                            <span class="implant-name">{{ implant.name }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {% if not implants_other and not implants_col1 and not implants_col2 %}
+            <p>No implants found.</p>
+            {% endif %}
+        </div>
+        <!-- --- END CARD 2 --- -->
+        <!--
+    ---
+    --- CARD 3: ALT MANAGEMENT
+    ---
+    -->
+        <div class="header-alts section header-card-item">
             <h2>Alt Management</h2>
             <ul class="alt-list" id="alt-list-container">
+                <!-- First, loop and show the main character -->
                 {% for char in all_chars_for_header %}
+                {% if char.is_main %}
                 <li class="alt-item">
                     <div class="alt-info">
                         <img src="https://images.evetech.net/characters/{{ char.character_id }}/portrait?size=32" alt="{{ char.character_name }}">
                         <span class="alt-name">{{ char.character_name }}</span>
-                        {% if char.is_main %}
                         <span class="main-tag">MAIN</span>
-                        {% endif %}
                     </div>
-                    {% if not char.is_main %}
+                    <!-- No button here since it's already main -->
+                </li>
+                {% endif %}
+                {% endfor %}
+
+                <!-- Second, loop and show all non-main characters -->
+                {% for char in all_chars_for_header %}
+                {% if not char.is_main %}
+                <li class="alt-item">
+                    <div class="alt-info">
+                        <img src="https://images.evetech.net/characters/{{ char.character_id }}/portrait?size=32" alt="{{ char.character_name }}">
+                        <span class="alt-name">{{ char.character_name }}</span>
+                    </div>
                     <button class="btn-set-main" data-id="{{ char.character_id }}">
                         Set as Main
                     </button>
-                    {% endif %}
                 </li>
+                {% endif %}
                 {% endfor %}
             </ul>
+        </div>
+        <!-- --- END CARD 3 --- -->
+
+    </div>
+    <!--
+    ---
+    --- END NEW 3-CARD HEADER
+    ---
+    -->
+    <!--
+    ---
+    --- SKILLS SECTION (REMAINS OUTSIDE)
+    ---
+    -->
+    <!-- --- MODIFIED: Added header-card-item class --- -->
+    <div class="section skills-section header-card-item">
+        <!-- MODIFIED: Added .skills-section class -->
+        <!-- --- NEW: Card-level overlay --- -->
+        <div class="card-loading-overlay">
+            <div class="spinner"></div>
+            <p>Refreshing...</p>
         </div>
         <!-- --- END NEW --- -->
 
-    </div>
-
-    <div class="section">
-        <!-- --- MODIFICATION: Added refresh button --- -->
-        <h2>
-            Implants
-            <button class="btn-refresh" data-section="implants" title="Refresh Implants">&#8635;</button>
-        </h2>
-        <!-- --- END MODIFICATION --- -->
-
-        <ul class="implant-other-list">
-            {% for implant in implants_other %}
-            <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
-                <img src="{{ implant.icon_url }}"
-                     alt="{{ implant.name }}">
-                <div class="implant-info">
-                    <span class="implant-slot">
-                        {% if implant.slot > 0 %}
-                        Slot {{ implant.slot }}
-                        {% else %}
-                        Implant
-                        {% endif %}
-                    </span>
-                    <span class="implant-name">{{ implant.name }}</span>
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
-
-        <div class="implant-grid-container">
-            <ul class="implant-column-list">
-                {% for implant in implants_col1 %}
-                <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
-                    <img src="{{ implant.icon_url }}"
-                         alt="{{ implant.name }}">
-                    <div class="implant-info">
-                        <span class="implant-slot">Slot {{ implant.slot }}</span>
-                        <span class="implant-name">{{ implant.name }}</span>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-            <ul class="implant-column-list">
-                {% for implant in implants_col2 %}
-                <li class="implant-item" title="{{ implant.name }} ({{ implant.group_name }})">
-                    <img src="{{ implant.icon_url }}"
-                         alt="{{ implant.name }}">
-                    <div class="implant-info">
-                        <span class="implant-slot">Slot {{ implant.slot }}</span>
-                        <span class="implant-name">{{ implant.name }}</span>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-
-        {% if not implants_other and not implants_col1 and not implants_col2 %}
-        <p>No implants found.</p>
-        {% endif %}
-    </div>
-
-    <div class="section">
-        <!-- --- MODIFICATION: Added refresh button --- -->
         <h2>
             Skills
             <button class="btn-refresh" data-section="skills" title="Refresh Skills">&#8635;</button>
         </h2>
-        <!-- --- END MODIFICATION --- -->
 
         <div class="skill-grid-container">
             {% for group_name, skill_list in grouped_skills.items %}
@@ -594,7 +769,7 @@ so they can be correctly injected into the base.html <head>.
             const overlay = document.getElementById('loading-overlay');
             const loadingText = document.getElementById('loading-text');
 
-            // --- 1. Automatic "All" Refresh ---
+            // --- 1. Automatic "All" Refresh (Uses global overlay) ---
             if (needsRefresh) {
                 // --- MODIFIED: Update loading text ---
                 loadingText.textContent = 'Refreshing ESI Data... (Skills, Implants, Corp)';
@@ -625,15 +800,30 @@ so they can be correctly injected into the base.html <head>.
                 });
             }
 
-            // --- 2. NEW: Manual Granular Refresh Buttons ---
+            // --- 2. MODIFIED: Manual Granular Refresh Buttons ---
             document.querySelectorAll('.btn-refresh').forEach(button => {
                 button.addEventListener('click', () => {
                     const section = button.dataset.section;
                     if (!section) return;
 
-                    // Show overlay
-                    loadingText.textContent = `Refreshing ${section}...`;
-                    overlay.classList.add('show');
+                    // --- MODIFICATION: Find the parent card and its overlay ---
+                    // We use .skills-section for the skills block
+                    const parentCard = button.closest('.header-card-item, .skills-section');
+                    let cardOverlay = null;
+                    if (parentCard) {
+                        cardOverlay = parentCard.querySelector('.card-loading-overlay');
+                    }
+
+                    // Show card-level overlay
+                    if (cardOverlay) {
+                        cardOverlay.querySelector('p').textContent = `Refreshing ${section}...`;
+                        cardOverlay.classList.add('show');
+                    } else {
+                        // Fallback to global overlay if card-level one isn't found
+                        loadingText.textContent = `Refreshing ${section}...`;
+                        overlay.classList.add('show');
+                    }
+                    // --- END MODIFICATION ---
 
                     // Call the refresh API with the specific section
                     fetch(`${refreshUrl}?section=${section}`, {
@@ -654,11 +844,20 @@ so they can be correctly injected into the base.html <head>.
                     })
                     .catch(error => {
                         console.error('Granular Refresh Error:', error);
-                        overlay.innerHTML = `<p style="color: #ff8a8a;">Error refreshing ${section} data.</p>`;
-                        // Keep overlay open to show error
+                        // --- MODIFICATION: Show error in the correct overlay ---
+                        if (cardOverlay) {
+                            // Keep the overlay open and show the error
+                            cardOverlay.innerHTML = `<p style="color: #ff8a8a;">Error: ${error.message}. Please try again.</p>`;
+                            // We need to add a click listener to hide it
+                            cardOverlay.addEventListener('click', () => cardOverlay.classList.remove('show'), { once: true });
+                        } else {
+                            overlay.innerHTML = `<p style="color: #ff8a8a;">Error refreshing ${section} data.</p>`;
+                        }
+                        // --- END MODIFICATION ---
                     });
                 });
             });
+            // --- END MODIFICATION ---
 
 
             // --- 3. Alt Management Button Listeners ---
