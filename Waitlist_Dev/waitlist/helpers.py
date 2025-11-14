@@ -1,10 +1,11 @@
 import logging
 from django.utils import timezone
-import requests
-from esi.models import Token
-from esi.clients import EsiClientProvider
-from bravado.exception import HTTPNotFound
+# --- MODIFICATION: Removed requests, Token, ESI client ---
 from .models import FleetWing, FleetSquad, EveCharacter, Fleet
+# --- NEW: Import our new ESI service and exceptions ---
+from . import esi
+from .exceptions import EsiNotFound
+# --- END NEW ---
 
 logger = logging.getLogger(__name__)
 
@@ -15,66 +16,42 @@ def is_fleet_commander(user):
     return user.groups.filter(name='Fleet Commander').exists()
 
 
-def get_refreshed_token_for_character(user, character: EveCharacter):
-    """
-    Fetches and, if necessary, refreshes the ESI token for a character.
-    Raises an exception on auth failure.
-    (Based on the version in waitlist/views.py)
-    """
-    try:
-        token = Token.objects.filter(
-            user=user, 
-            character_id=character.character_id
-        ).order_by('-created').first()
-        
-        if not token:
-            logger.warning(f"No ESI token found for character {character.character_id}")
-            raise Token.DoesNotExist
-
-        # Handle token_expiry being None (e.g., on first login)
-        if not character.token_expiry or character.token_expiry < timezone.now():
-            logger.info(f"Refreshing ESI token for {character.character_name} ({character.character_id})")
-            token.refresh()
-            character.access_token = token.access_token
-            # .expires is an in-memory attribute added by .refresh()
-            character.token_expiry = token.expires 
-            character.save()
-            logger.info(f"Token refreshed successfully for {character.character_name}")
-            
-        return token
-
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 400:
-            # Refresh token is invalid.
-            logger.error(f"ESI token refresh failed for {character.character_name}. Token is invalid/revoked.")
-            raise Exception("Your ESI token is invalid or has been revoked. Please log out and back in.")
-        else:
-            logger.error(f"ESI HTTPError during token refresh for {character.character_name}: {e}")
-            raise e # Re-raise other ESI errors
-    except Token.DoesNotExist:
-        logger.warning(f"Token.DoesNotExist raised for {character.character_name}")
-        raise Exception("Could not find a valid ESI token for this character.")
-    except Exception as e:
-        # Catch other errors, like TypeError if token_expiry is None
-        logger.error(f"Unexpected token error for {character.character_name}: {e}", exc_info=True)
-        raise Exception(f"An unexpected token error occurred: {e}")
+# --- MODIFICATION: Removed get_refreshed_token_for_character function ---
+# This logic is now centralized in waitlist/esi.py
 
 
-def _update_fleet_structure(esi: EsiClientProvider, fc_character: EveCharacter, token: Token, fleet_id: int, fleet_obj: Fleet):
+def _update_fleet_structure(fleet_obj: Fleet):
     """
     Pulls ESI fleet structure and saves it to the DB.
     *** This preserves existing category mappings. ***
+    --- MODIFIED: Now uses the central ESI service ---
     """
+    
+    # --- NEW: Get client and character from fleet object ---
+    if not fleet_obj.fleet_commander or not fleet_obj.esi_fleet_id:
+        logger.error(f"_update_fleet_structure called on unlinked fleet {fleet_obj.id}")
+        return
+
+    esi_client = esi.get_esi_client()
+    fc_character = fleet_obj.fleet_commander
+    fleet_id = fleet_obj.esi_fleet_id
+    # --- END NEW ---
+    
     logger.debug(f"Updating fleet structure for fleet {fleet_id} (Fleet Obj: {fleet_obj.id})")
+    
     # 1. Get wings from ESI
     try:
-        wings = esi.client.Fleets.get_fleets_fleet_id_wings(
-            fleet_id=fleet_id,
-            token=token.access_token
-        ).results()
+        # --- MODIFICATION: Use make_esi_call wrapper ---
+        wings = esi.make_esi_call(
+            esi_client.client.Fleets.get_fleets_fleet_id_wings,
+            character=fc_character,
+            required_scopes=['esi-fleets.read_fleet.v1'],
+            fleet_id=fleet_id
+        )
+        # --- END MODIFICATION ---
         logger.debug(f"Found {len(wings)} wings in ESI")
-    except HTTPNotFound:
-        logger.warning(f"HTTPNotFound while fetching fleet wings for fleet {fleet_id}. Fleet may be closed.")
+    except EsiNotFound: # MODIFIED exception
+        logger.warning(f"EsiNotFound while fetching fleet wings for fleet {fleet_id}. Fleet may be closed.")
         # Re-raise so the calling view can handle it
         raise
     

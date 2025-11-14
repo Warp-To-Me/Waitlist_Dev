@@ -11,11 +11,14 @@ import secrets
 from datetime import timezone, timedelta # Import for time calculations
 # Import the CallbackRedirect model from the esi library
 from esi.models import CallbackRedirect, Token
-# --- Import ESI client ---
-from esi.clients import EsiClientProvider
-from bravado.exception import HTTPNotFound
+# --- MODIFICATION: Removed EsiClientProvider and HTTPNotFound ---
 # --- Import logging ---
 import logging
+# --- NEW IMPORTS ---
+from waitlist import esi
+from waitlist.exceptions import EsiException
+# --- END NEW IMPORTS ---
+
 # Get a logger for this specific Python file
 logger = logging.getLogger(__name__)
 
@@ -129,49 +132,17 @@ def sso_complete_login(request):
     user_account = None 
     user_was_authenticated = request.user.is_authenticated
     
-    esi = EsiClientProvider()
-    
-    # Helper function to get public corp/alliance data
-    def get_public_character_data(character_id):
-        try:
-            logger.debug(f"SSO Step 3: Getting public data for char {character_id}")
-            public_data = esi.client.Character.get_characters_character_id(
-                character_id=character_id
-            ).results()
-            
-            corp_id = public_data.get('corporation_id')
-            alliance_id = public_data.get('alliance_id')
-            
-            corp_name = None
-            if corp_id:
-                corp_data = esi.client.Corporation.get_corporations_corporation_id(
-                    corporation_id=corp_id
-                ).results()
-                corp_name = corp_data.get('name')
-                
-            alliance_name = None
-            if alliance_id:
-                try:
-                    alliance_data = esi.client.Alliance.get_alliances_alliance_id(
-                        alliance_id=alliance_id
-                    ).results()
-                    alliance_name = alliance_data.get('name')
-                except HTTPNotFound:
-                    logger.warning(f"SSO Step 3: Could not find alliance {alliance_id} (dead alliance?)")
-                    alliance_name = "N/A" # Handle dead alliances
-
-            return {
-                "corporation_id": corp_id,
-                "corporation_name": corp_name,
-                "alliance_id": alliance_id,
-                "alliance_name": alliance_name,
-            }
-        except Exception as e:
-            logger.error(f"Error fetching public data for {character_id}: {e}", exc_info=True)
-            return {} # Return empty dict on failure
+    # --- MODIFICATION: Removed local ESI client and helper function ---
     
     # Get public data
-    public_data = get_public_character_data(char_id)
+    # --- MODIFICATION: Call central ESI service ---
+    try:
+        public_data = esi.get_character_public_data(char_id)
+    except EsiException as e:
+        # Log the error but don't fail the login
+        logger.error(f"Error fetching public data for {char_id} during login: {e}", exc_info=True)
+        public_data = {} # Return empty dict on failure
+    # --- END MODIFICATION ---
 
     if user_was_authenticated:
         # CASE 1: USER IS ALREADY LOGGED IN (Adding an Alt)
