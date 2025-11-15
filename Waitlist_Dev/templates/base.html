@@ -221,7 +221,7 @@
             border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             width: 90%;
-            max-width: 800px; /* Modal width */
+            max-width: 1000px; /* MODIFIED: Modal width */
             display: flex;
             flex-direction: column;
             /* Max height for modal, enables scrolling */
@@ -232,7 +232,7 @@
         /* Make the fit detail modal wider */
         #fit-detail-modal-overlay .modal-content,
         #doctrine-fit-modal-overlay .modal-content {
-            max-width: 800px; /* MODIFIED: Widen to 800px */
+            max-width: 1000px; /* MODIFIED: Widen to 1000px */
         }
 
         .modal-header {
@@ -282,7 +282,7 @@
 
         @media (min-width: 768px) {
             #xup-modal-overlay .modal-body {
-                grid-template-columns: 2fr 1fr; /* Fit text vs implant list */
+                grid-template-columns: 2.5fr 2.5fr; /* MODIFIED: Fit text vs implant list */
             }
         }
 
@@ -320,6 +320,11 @@
             padding: 15px;
             max-height: 340px; /* Match form height */
             overflow-y: auto;
+            /* --- MODIFICATION: Add flex properties --- */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            /* --- END MODIFICATION --- */
         }
 
             .implant-display h3 {
@@ -352,8 +357,26 @@
             }
         }
 
-        /* Styles for the injected implant partial */
-        .implant-list {
+        /* ---
+        --- MODIFICATION: Replaced modal implant styles
+        --- with compact styles from pilot_detail.html
+        --- */
+        .implant-other-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            grid-template-columns: 1fr; /* Modal is compact, 1 column is fine */
+            gap: 4px;
+        }
+
+        .implant-grid-container {
+            display: grid;
+            grid-template-columns: 1fr; /* Stack columns in modal */
+            gap: 10px;
+        }
+
+        .implant-column-list {
             list-style: none;
             padding: 0;
             margin: 0;
@@ -362,44 +385,51 @@
             gap: 4px;
         }
 
-        .implant-item-modal {
+        .implant-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 4px;
+            gap: 6px;
+            padding: 2px 4px;
             background: #3a3a3a;
             border-radius: 5px;
         }
 
-            .implant-item-modal img {
-                width: 32px;
-                height: 32px;
+            .implant-item img {
+                width: 24px; /* Compact icon */
+                height: 24px;
                 border-radius: 4px;
                 flex-shrink: 0;
             }
 
-        .implant-info-modal {
-            display: flex;
-            flex-direction: column;
+        .implant-info {
+            display: flex; /* This is a ROW */
+            align-items: center;
+            gap: 6px;
             flex-grow: 1;
             min-width: 0;
         }
 
-        .implant-slot-modal {
+        .implant-slot {
             font-size: 0.7em;
             font-weight: bold;
             color: #aaa;
             text-transform: uppercase;
+            flex-shrink: 0;
         }
 
-        .implant-name-modal {
+        .implant-name {
             font-size: 0.9em;
             font-weight: 500;
             color: #fff;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            flex-grow: 1;
         }
+        /* ---
+        --- END MODIFICATION
+        --- */
+
 
         /* ---
         --- NEW SLOTTED FIT MODAL STYLES (REPLACES .fit-detail-list)
@@ -906,7 +936,7 @@
                 Are you sure you want to do this?
             </div>
             <div class="modal-footer">
-                <div class="modal-actions">
+                <div class_="modal-actions">
                     <button class="header-btn btn-cancel" id="custom-confirm-cancel-btn">Cancel</button>
                     <button class="header-btn btn-confirm" id="custom-confirm-ok-btn">Confirm</button>
                 </div>

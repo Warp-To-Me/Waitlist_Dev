@@ -3,42 +3,49 @@
 {% endif %}
 
 <!--
-This list uses the modal-specific CSS classes from base.html
-(e.g., implant-item-modal)
+This template now uses the compact classes (e.g., .implant-item)
+which are defined in base.html.
 -->
-<ul class="implant-list">
+<ul class="implant-other-list">
     {% for implant in implants_other %}
-    <li class="implant-item-modal" title="{{ implant.name }}">
-        <img src="{{ implant.icon_url }}"
+    <li class="implant-item" title="{{ implant.name }}">
+        <img src="{{ implant.icon_url|default:'https://placehold.co/24x24/3a3a3a/999?text=?' }}"
              alt="{{ implant.name }}">
-        <div class="implant-info-modal">
-            <span class="implant-slot-modal">
-                Implant
+        <div class="implant-info">
+            {% if implant.slot > 0 %}
+            <span class="implant-slot">
+                Slot {{ implant.slot }}
             </span>
-            <span class="implant-name-modal">{{ implant.name }}</span>
-        </div>
-    </li>
-    {% endfor %}
-
-    {% for implant in implants_col1 %}
-    <li class="implant-item-modal" title="{{ implant.name }}">
-        <img src="{{ implant.icon_url }}"
-             alt="{{ implant.name }}">
-        <div class="implant-info-modal">
-            <span class="implant-slot-modal">Slot {{ implant.slot }}</span>
-            <span class="implant-name-modal">{{ implant.name }}</span>
-        </div>
-    </li>
-    {% endfor %}
-
-    {% for implant in implants_col2 %}
-    <li class="implant-item-modal" title="{{ implant.name }}">
-        <img src="{{ implant.icon_url }}"
-             alt="{{ implant.name }}">
-        <div class="implant-info-modal">
-            <span class="implant-slot-modal">Slot {{ implant.slot }}</span>
-            <span class="implant-name-modal">{{ implant.name }}</span>
+            {% endif %}
+            <span class="implant-name">{{ implant.name }}</span>
         </div>
     </li>
     {% endfor %}
 </ul>
+
+<div class="implant-grid-container">
+    <ul class="implant-column-list">
+        {% for implant in implants_col1 %}
+        <li class="implant-item" title="{{ implant.name }}">
+            <img src="{{ implant.icon_url|default:'https://placehold.co/24x24/3a3a3a/999?text=?' }}"
+                 alt="{{ implant.name }}">
+            <div class="implant-info">
+                <span class="implant-slot">Slot {{ implant.slot }}</span>
+                <span class="implant-name">{{ implant.name }}</span>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    <ul class="implant-column-list">
+        {% for implant in implants_col2 %}
+        <li class="implant-item" title="{{ implant.name }}">
+            <img src="{{ implant.icon_url|default:'https://placehold.co/24x24/3a3a3a/999?text=?' }}"
+                 alt="{{ implant.name }}">
+            <div class="implant-info">
+                <span class="implant-slot">Slot {{ implant.slot }}</span>
+                <span class="implant-name">{{ implant.name }}</span>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
